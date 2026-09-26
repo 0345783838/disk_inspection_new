@@ -1,0 +1,117 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="DiskInspection.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="Cam1Sn" Type="System.String" Scope="User">
+      <Value Profile="(Default)">21573792</Value>
+    </Setting>
+    <Setting Name="Cam2Sn" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="EndPointDebug" Type="System.String" Scope="User">
+      <Value Profile="(Default)">check_disk_debug</Value>
+    </Setting>
+    <Setting Name="EndPointCheckStatus" Type="System.String" Scope="User">
+      <Value Profile="(Default)">check_service_status</Value>
+    </Setting>
+    <Setting Name="ApiUrlAi" Type="System.String" Scope="User">
+      <Value Profile="(Default)">http://127.0.0.1:8386/ai</Value>
+    </Setting>
+    <Setting Name="PlcIp" Type="System.String" Scope="User">
+      <Value Profile="(Default)">127.0.0.1</Value>
+    </Setting>
+    <Setting Name="Cam1Exposure" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">100</Value>
+    </Setting>
+    <Setting Name="Cam2Exposure" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">100</Value>
+    </Setting>
+    <Setting Name="SaveEnable" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="SaveMode" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">2</Value>
+    </Setting>
+    <Setting Name="SavePath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">D:\huynhvc\OTHERS\disk_checking\disk_checking\APP\out_test</Value>
+    </Setting>
+    <Setting Name="PlcPort" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">8000</Value>
+    </Setting>
+    <Setting Name="EndpointConnectPlc" Type="System.String" Scope="User">
+      <Value Profile="(Default)">connect_plc</Value>
+    </Setting>
+    <Setting Name="EndpointDisconnectPlc" Type="System.String" Scope="User">
+      <Value Profile="(Default)">disconnect_plc</Value>
+    </Setting>
+    <Setting Name="EndpointControlUvLight" Type="System.String" Scope="User">
+      <Value Profile="(Default)">control_uv_light</Value>
+    </Setting>
+    <Setting Name="EndpointControlWhiteLight" Type="System.String" Scope="User">
+      <Value Profile="(Default)">control_white_light</Value>
+    </Setting>
+    <Setting Name="EndpointCheckConnection" Type="System.String" Scope="User">
+      <Value Profile="(Default)">check_connection</Value>
+    </Setting>
+    <Setting Name="EndpointOnErrorAbnormal" Type="System.String" Scope="User">
+      <Value Profile="(Default)">on_error_abnormal</Value>
+    </Setting>
+    <Setting Name="ApiUrlCom" Type="System.String" Scope="User">
+      <Value Profile="(Default)">http://127.0.0.1:8386/communication</Value>
+    </Setting>
+    <Setting Name="EndPointDebugUv" Type="System.String" Scope="User">
+      <Value Profile="(Default)">check_disk_uv_debug</Value>
+    </Setting>
+    <Setting Name="EndpointReadTrigger" Type="System.String" Scope="User">
+      <Value Profile="(Default)">read_trigger</Value>
+    </Setting>
+    <Setting Name="EndpointResetTrigger" Type="System.String" Scope="User">
+      <Value Profile="(Default)">reset_trigger</Value>
+    </Setting>
+    <Setting Name="EndpointInspectWhiteLight" Type="System.String" Scope="User">
+      <Value Profile="(Default)">check_disk_white</Value>
+    </Setting>
+    <Setting Name="EndpointInspectUvLight" Type="System.String" Scope="User">
+      <Value Profile="(Default)">check_disk_uv</Value>
+    </Setting>
+    <Setting Name="StartShiftTime" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="CurrentOK" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="CurrentNG" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="WaitWhiteLightOn" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">2000</Value>
+    </Setting>
+    <Setting Name="WaitWhiteLightOff" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">5000</Value>
+    </Setting>
+    <Setting Name="WaitUvLightOn" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">2000</Value>
+    </Setting>
+    <Setting Name="WaitUvLightOff" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">5000</Value>
+    </Setting>
+    <Setting Name="SaveOption" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">1</Value>
+    </Setting>
+    <Setting Name="EndpointOnErrorMixing" Type="System.String" Scope="User">
+      <Value Profile="(Default)">on_error_mixing</Value>
+    </Setting>
+    <Setting Name="CurrentWarning" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="EndpointOnOkSignal" Type="System.String" Scope="User">
+      <Value Profile="(Default)">on_ok_signal</Value>
+    </Setting>
+    <Setting Name="DeleteDays" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">10</Value>
+    </Setting>
+    <Setting Name="EndpointOffOkSignal" Type="System.String" Scope="User">
+      <Value Profile="(Default)">off_ok_signal</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

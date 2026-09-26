@@ -1,0 +1,6 @@
+# Default ignored files
+.idea/*
+.venv/*
+__pycache__/
+main.build/
+main.dist/

@@ -1,0 +1,60 @@
+﻿<Window x:Class="DiskInspection.Views.ActivationWindows.ActivationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DiskInspection.Views.ActivationWindows"
+        mc:Ignorable="d"
+    Title="Activate License"
+    Width="500"
+    Height="320"
+    ResizeMode="NoResize"
+    Topmost="True"
+    WindowStartupLocation="CenterScreen">
+
+    <Grid Margin="15">
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock FontWeight="Bold" Text="Machine ID" />
+        <TextBox
+            x:Name="tbMachineId"
+            Grid.Row="1"
+            Margin="0,5,0,10"
+            IsReadOnly="True" />
+
+        <TextBlock
+            Grid.Row="2"
+            FontWeight="Bold"
+            Text="Challenge" />
+        <TextBox
+            x:Name="tbChallenge"
+            Grid.Row="3"
+            Margin="0,5,0,10"
+            IsReadOnly="True" />
+
+        <StackPanel Grid.Row="4">
+            <TextBlock FontWeight="Bold" Text="Activation Key" />
+            <TextBox
+                x:Name="tbActivationKey"
+                Height="60"
+                Margin="0,5,0,10"
+                AcceptsReturn="True"
+                TextWrapping="Wrap" />
+
+            <Button
+                Width="120"
+                Height="30"
+                HorizontalAlignment="Right"
+                Click="Activate_Click"
+                Content="Activate" />
+        </StackPanel>
+
+    </Grid>
+</Window>

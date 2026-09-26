@@ -1,0 +1,472 @@
+﻿<Window
+    x:Class="DiskInspection.Views.DebugWindows.DebugWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:DiskInspection.Views.DebugWindows"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:myControl="clr-namespace:Heal.MyControl;assembly=ImageCtlWPF"
+    xmlns:uc="clr-namespace:DiskInspection.Resources.Styles"
+    xmlns:utils="clr-namespace:DiskInspection.Utils"
+    xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+    Title="Debug Mode"
+    Width="1300"
+    Height="768"
+    MinWidth="1300"
+    MinHeight="768"
+    Closing="Window_Closing"
+    Icon="/Resources/Icons/testing.png"
+    Loaded="Window_Loaded"
+    Style="{StaticResource WindowStyle}"
+    WindowStartupLocation="CenterScreen"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <utils:FileNameConverterMain x:Key="FileNameConverterMain" />
+        <utils:StatusConverter x:Key="StatusConverter" />
+    </Window.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="450" />
+            <ColumnDefinition Width="10" />
+            <ColumnDefinition />
+        </Grid.ColumnDefinitions>
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="200" />
+                <RowDefinition />
+                <RowDefinition Height="15" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0">
+                <GroupBox
+                    Margin="5,5,5,5"
+                    BorderBrush="Gray"
+                    BorderThickness="1"
+                    Header="Image Tools">
+                    <TabControl Background="#EEEEEE" SelectionChanged="TabControl_SelectionChanged">
+                        <TabItem
+                            Name="tabOffline"
+                            Background="#EEEEEE"
+                            Header="Offline">
+                            <StackPanel VerticalAlignment="Center" Orientation="Vertical">
+                                <StackPanel
+                                    Margin="0,0,0,0"
+                                    HorizontalAlignment="Center"
+                                    Background="#EEEEEE"
+                                    Orientation="Horizontal">
+                                    <uc:CustomButton
+                                        x:Name="btnLoadFolder"
+                                        Title="Load"
+                                        Width="170"
+                                        Height="85"
+                                        Margin="5,5,5,5"
+                                        EndColor="#1e5b53"
+                                        IconHeight="45"
+                                        IconWidth="45"
+                                        IsEnabled="{Binding ConfirmEnable}"
+                                        LeftIcon="/Resources/Icons/folder-browser.png"
+                                        MouseDown="btnLoadFolder_MouseDown"
+                                        StartColor="#ccffaa"
+                                        Value="Folder" />
+                                    <uc:CustomButton
+                                        x:Name="btnLoadImages"
+                                        Title="Load"
+                                        Width="170"
+                                        Height="85"
+                                        Margin="5,5,5,5"
+                                        EndColor="#18a5a7"
+                                        IconHeight="45"
+                                        IconWidth="45"
+                                        IsEnabled="{Binding ConfirmEnable}"
+                                        LeftIcon="/Resources/Icons/load_image.png"
+                                        MouseDown="btnLoadImages_MouseDown"
+                                        StartColor="#b6c0c5"
+                                        Value="Images" />
+                                </StackPanel>
+                                <Label
+                                    HorizontalAlignment="Center"
+                                    Content="Load ảnh chụp đèn trắng và ảnh UV, tên ảnh giống nhau phân biệt bằng White và UV"
+                                    FontStyle="Italic"
+                                    Foreground="DarkRed" />
+                                <Label
+                                    Margin="0,-10,0,0"
+                                    HorizontalAlignment="Center"
+                                    Content="Mọi ảnh UV không có ảnh White đi kèm sẽ bị bỏ qua!"
+                                    FontStyle="Italic"
+                                    Foreground="DarkRed" />
+                            </StackPanel>
+                        </TabItem>
+                        <TabItem
+                            Name="tabOnline"
+                            Background="#EEEEEE"
+                            Header="Online">
+                            <StackPanel VerticalAlignment="Center" Orientation="Vertical">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                                    <Label
+                                        VerticalContentAlignment="Center"
+                                        Content="CAM: "
+                                        FontSize="16" />
+                                    <ComboBox
+                                        x:Name="cbbCamera"
+                                        Width="140"
+                                        Height="50"
+                                        Margin="5,0,10,0"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        FontSize="20"
+                                        SelectedValuePath="Content"
+                                        SelectionChanged="cbbCamera_SelectionChanged">
+                                        <ComboBoxItem
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center"
+                                            Content="CAM 1"
+                                            FontSize="20" />
+                                        <ComboBoxItem
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center"
+                                            Content="CAM 2"
+                                            FontSize="20" />
+                                    </ComboBox>
+                                    <uc:CustomButton
+                                        x:Name="btnTriggerSoftware"
+                                        Title="Capture"
+                                        Width="150"
+                                        Height="75"
+                                        Margin="5,5,5,5"
+                                        EndColor="#112D60"
+                                        IconHeight="45"
+                                        IconWidth="45"
+                                        IsEnabled="{Binding CanCapture}"
+                                        LeftIcon="/Resources/Icons/folder-browser.png"
+                                        MouseDown="btnTriggerSoftware_MouseDown"
+                                        StartColor="#B6C0C5"
+                                        Value="Image" />
+
+                                </StackPanel>
+                            </StackPanel>
+
+                        </TabItem>
+                    </TabControl>
+                </GroupBox>
+            </Grid>
+            <Grid Grid.Row="1">
+                <DataGrid
+                    Name="dgImageInfoPaths"
+                    Margin="10,5,10,5"
+                    AlternationCount="15000"
+                    AutoGenerateColumns="False"
+                    EnableColumnVirtualization="True"
+                    EnableRowVirtualization="True"
+                    IsReadOnly="True"
+                    ItemsSource="{Binding ImagesInfoList}"
+                    RowHeight="35"
+                    SelectedItem="{Binding SelectedImageInfo}"
+                    SelectionMode="Single"
+                    VirtualizingPanel.IsVirtualizing="True">
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="FontWeight" Value="Bold" />
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    <DataGrid.Columns>
+                        <!--  Cột số thứ tự  -->
+                        <DataGridTemplateColumn Width="30" Header="ID">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding ID}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!--  Cột đường dẫn ảnh  -->
+                        <DataGridTemplateColumn Width="*" Header="Image Name">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Foreground="{Binding Status, Converter={StaticResource StatusConverter}}"
+                                        Text="{Binding FilePath, Converter={StaticResource FileNameConverterMain}}"
+                                        TextAlignment="Left" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+            <Grid Grid.Row="3" Margin="10,0,10,3">
+                <ProgressBar
+                    Name="pgbProgress"
+                    Maximum="{Binding MaxValue}"
+                    Value="{Binding ProcessingCount, Mode=OneWay}" />
+                <TextBlock
+                    Name="tbProgressPercent"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontSize="9"
+                    FontWeight="Bold"
+                    Foreground="Black"
+                    Text="{Binding ProcessingRatio, Mode=OneWay}" />
+            </Grid>
+        </Grid>
+        <Grid Grid.Column="1">
+            <Border
+                Width="1"
+                Margin="0,5,0,5"
+                Background="DarkGray" />
+        </Grid>
+        <Grid Grid.Column="2">
+            <GroupBox
+                Margin="10,5,5,5"
+                BorderBrush="Gray"
+                BorderThickness="1"
+                Header="Image">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="30" />
+                        <RowDefinition />
+                        <RowDefinition Height="62.41" />
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0">
+                        <Label
+                            Name="lbTitile"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="Image Title"
+                            FontSize="14"
+                            FontWeight="Bold"
+                            Foreground="#D46C4E" />
+                        <DockPanel LastChildFill="False">
+                            <Button
+                                x:Name="btnSaveSettings"
+                                Margin="5,0,0,0"
+                                Click="btnSaveSettings_Click"
+                                DockPanel.Dock="Right"
+                                IsEnabled="{Binding CanSave}"
+                                ToolTip="Setting Parameters">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="3*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image
+                                            Grid.Column="0"
+                                            Margin="3"
+                                            Source="/Resources/Icons/save.png" />
+                                        <Separator Grid.Column="0">
+                                            <Separator.LayoutTransform>
+                                                <RotateTransform Angle="90" />
+                                            </Separator.LayoutTransform>
+                                        </Separator>
+                                    </StackPanel>
+                                    <Label
+                                        Grid.Column="2"
+                                        Margin="0,-2,0,0"
+                                        VerticalAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Content="Save Settings" />
+                                </Grid>
+                            </Button>
+                            <Button
+                                x:Name="btnSetting"
+                                Click="btnSetting_Click"
+                                DockPanel.Dock="Right"
+                                ToolTip="Setting Parameters">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="3*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image
+                                            Grid.Column="0"
+                                            Margin="3"
+                                            Source="/Resources/Icons/settings.png" />
+                                        <Separator Grid.Column="0">
+                                            <Separator.LayoutTransform>
+                                                <RotateTransform Angle="90" />
+                                            </Separator.LayoutTransform>
+                                        </Separator>
+                                    </StackPanel>
+                                    <Label
+                                        Grid.Column="2"
+                                        Margin="0,-2,0,0"
+                                        VerticalAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Content="Setting" />
+                                </Grid>
+                            </Button>
+                        </DockPanel>
+                    </Grid>
+                    <Grid Grid.Row="1">
+                        <myControl:ImageBox
+                            x:Name="imbImage"
+                            Margin="5"
+                            Background="LightGray" />
+                    </Grid>
+                    <Grid Grid.Row="2">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="206*" />
+                                <ColumnDefinition Width="519" />
+                                <ColumnDefinition Width="205*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid Grid.Column="1">
+                                <StackPanel
+                                    Margin="0,0,0,0"
+                                    HorizontalAlignment="Center"
+                                    Orientation="Horizontal">
+                                    <Button
+                                        x:Name="btnBack"
+                                        Width="70"
+                                        Height="60"
+                                        Margin="0,0,5,0"
+                                        Background="Transparent"
+                                        Click="btnBack_Click"
+                                        IsEnabled="{Binding IsBackEnable}">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="45" />
+                                                <RowDefinition Height="25" />
+                                            </Grid.RowDefinitions>
+                                            <Grid Grid.Row="1">
+                                                <Label
+                                                    Grid.Column="0"
+                                                    Width="44"
+                                                    Height="27"
+                                                    Margin="19,-12,13,10"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Content="Back"
+                                                    FontSize="13"
+                                                    FontWeight="Bold" />
+                                            </Grid>
+
+                                            <Grid Grid.Row="0">
+                                                <Image
+                                                    Grid.Column="0"
+                                                    Width="65"
+                                                    Height="35"
+                                                    Margin="5,0,4.6,5"
+                                                    RenderTransformOrigin="0.5,0.5"
+                                                    Source="/Resources/Icons/arrow-left.PNG" />
+                                            </Grid>
+                                        </Grid>
+                                    </Button>
+                                    <ComboBox
+                                        x:Name="cbbImageIndex"
+                                        Width="50"
+                                        Height="40"
+                                        Margin="5"
+                                        Padding="0,-4,0,0"
+                                        HorizontalContentAlignment="Right"
+                                        VerticalContentAlignment="Center"
+                                        DisplayMemberPath="ID"
+                                        FontSize="26"
+                                        FontWeight="Bold"
+                                        ItemsSource="{Binding SelectedImageInfo.Images}"
+                                        SelectedItem="{Binding SelectedImage}">
+                                        <ComboBox.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ComboBox.ItemsPanel>
+                                    </ComboBox>
+                                    <Label
+                                        Margin="-2,-4,0,0"
+                                        VerticalAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Content="/"
+                                        FontSize="20"
+                                        FontWeight="Bold" />
+                                    <Label
+                                        x:Name="lbTotalPad"
+                                        Margin="0,5,5,5"
+                                        VerticalAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Content="{Binding ImageResultInfos.Count}"
+                                        FontSize="25"
+                                        FontWeight="Bold" />
+                                    <Button
+                                        x:Name="btnNext"
+                                        Width="70"
+                                        Height="60"
+                                        Margin="5,0,5,0"
+                                        Background="Transparent"
+                                        Click="btnNext_Click"
+                                        IsEnabled="{Binding IsNextEnable}">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="45" />
+                                                <RowDefinition Height="25" />
+                                            </Grid.RowDefinitions>
+                                            <Grid Grid.Row="1">
+                                                <Label
+                                                    Grid.Column="0"
+                                                    Width="49"
+                                                    Height="27"
+                                                    Margin="17,-12,10,10"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Content="Next"
+                                                    FontSize="13"
+                                                    FontWeight="Bold" />
+                                            </Grid>
+
+                                            <Grid Grid.Row="0">
+                                                <Image
+                                                    Grid.Column="0"
+                                                    Width="65"
+                                                    Height="35"
+                                                    Margin="5,0,4.6,5"
+                                                    RenderTransformOrigin="0.5,0.5"
+                                                    Source="/Resources/Icons/arrow-right.PNG" />
+                                            </Grid>
+                                        </Grid>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                            <Grid Grid.Column="2">
+                                <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                                    <Label
+                                        VerticalAlignment="Center"
+                                        Content="Reset&#x0A;Image"
+                                        FontSize="14" />
+                                    <Button
+                                        x:Name="btnResetScale"
+                                        Width="40"
+                                        Height="40"
+                                        Margin="0"
+                                        Background="Transparent"
+                                        Click="btnResetScale_Click">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="45" />
+                                            </Grid.RowDefinitions>
+                                            <Grid Grid.Row="0">
+                                                <Image
+                                                    Grid.Column="0"
+                                                    Margin="0,2,0,11"
+                                                    Source="/Resources/Icons/undo.png" />
+                                            </Grid>
+                                        </Grid>
+                                    </Button>
+                                </StackPanel>
+
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </GroupBox>
+
+        </Grid>
+    </Grid>
+</Window>

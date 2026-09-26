@@ -1,0 +1,34 @@
+# Local backups and editor state
+.work/
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Restored dependencies and build/package output
+APP/packages/
+**/bin/
+**/obj/
+SERVICE/main.build/
+SERVICE/main.dist/
+
+# Python environments and caches
+**/.venv/
+**/venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local runtime state
+*.log
+logs/
+images/
+license.dat
+*.env.local
+
+# Unused local experiments (production uses config.env and three other models)
+SERVICE/config/config_test.env
+SERVICE/config/models/d_p.onnx

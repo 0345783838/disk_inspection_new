@@ -1,0 +1,850 @@
+﻿<Window
+    x:Class="DiskInspection.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:DiskInspection"
+    xmlns:lvc="clr-namespace:LiveCharts.Wpf;assembly=LiveCharts.Wpf"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:myControl="clr-namespace:Heal.MyControl;assembly=ImageCtlWPF"
+    xmlns:utils="clr-namespace:DiskInspection.Utils"
+    Title="Disks Inspection"
+    Width="1400"
+    Height="830"
+    MinWidth="1280"
+    MinHeight="800"
+    Closing="Window_Closing"
+    Icon="/Resources/Icons/disk.png"
+    Loaded="Window_Loaded"
+    Style="{StaticResource WindowStyle}"
+    WindowStartupLocation="CenterScreen"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <utils:MainStatusColorConverter x:Key="MainStatusColorConverter" />
+        <utils:MainStatusConverter x:Key="MainStatusConverter" />
+        <utils:MainResCamStatusConverter x:Key="MainResCamStatusConverter" />
+        <utils:MainInspectionStatusConverter x:Key="MainInspectionStatusConverter" />
+        <utils:TextColorConverter x:Key="TextColorConverter" />
+        <utils:NullToBoolConverter x:Key="NullToBoolConverter" />
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="90" />
+            <RowDefinition />
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <Grid>
+                <DockPanel x:Name="MenuTools" LastChildFill="True">
+                    <DockPanel
+                        x:Name="dpnMenu"
+                        Margin="5,0,0,0"
+                        DockPanel.Dock="Top">
+                        <Menu
+                            x:Name="MenuStrip"
+                            DockPanel.Dock="Top"
+                            FontSize="13">
+                            <MenuItem Header="_Menu" />
+                            <MenuItem Header="_Tools" />
+                            <MenuItem Header="_Help" />
+                        </Menu>
+                    </DockPanel>
+                    <Grid DockPanel.Dock="Top">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="540" />
+                        </Grid.ColumnDefinitions>
+                        <ToolBar Grid.Column="0" Background="Transparent">
+                            <ToolBar.Resources>
+                                <Style x:Key="btToolBarStyle" TargetType="Button">
+                                    <Setter Property="Margin" Value="10,0,10,0" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                </Style>
+                            </ToolBar.Resources>
+                            <Button
+                                x:Name="btnSettings"
+                                Margin="5,0,5,0"
+                                Click="btnSettings_Click"
+                                Style="{StaticResource btToolBarStyle}"
+                                ToolTip="General Settings">
+                                <Image
+                                    Width="45"
+                                    Height="45"
+                                    Source="/Resources/Icons/settings.png"
+                                    Style="{DynamicResource imageButton}" />
+                            </Button>
+
+                            <Separator />
+                            <Button
+                                x:Name="btnDebug"
+                                Margin="5,0,5,0"
+                                Click="btnDebug_Click"
+                                Style="{StaticResource btToolBarStyle}"
+                                ToolTip="Offine Mode">
+                                <Image
+                                    Width="45"
+                                    Height="45"
+                                    Source="/Resources/Icons/testing.png"
+                                    Style="{DynamicResource imageButton}" />
+                            </Button>
+                            <Separator />
+                            <Button
+                                x:Name="btnStart"
+                                Margin="5,0,5,0"
+                                Click="btnStart_Click"
+                                Style="{StaticResource btToolBarStyle}"
+                                ToolTip="-Run">
+                                <Image
+                                    x:Name="imBtnStart"
+                                    Width="50"
+                                    Height="50"
+                                    Source="/Resources/Icons/start.png"
+                                    Style="{DynamicResource imageButton}" />
+                            </Button>
+                            <Separator />
+                            <Button
+                                x:Name="btnStop"
+                                Margin="5,0,5,0"
+                                Click="btnStop_Click"
+                                IsEnabled="False"
+                                Style="{StaticResource btToolBarStyle}"
+                                ToolTip="Stop">
+                                <Image
+                                    x:Name="imBtnStop"
+                                    Width="50"
+                                    Height="50"
+                                    Source="/Resources/Icons/stop.png"
+                                    Style="{DynamicResource imageButton}" />
+                            </Button>
+                            <Separator />
+                            <!--<Button
+                                x:Name="btnTest"
+                                Margin="5,0,5,0"
+                                Click="btnTest_Click"
+                                IsEnabled="True"
+                                Style="{StaticResource btToolBarStyle}"
+                                ToolTip="Capture Once">
+                                <Image
+                                    Width="50"
+                                    Height="50"
+                                    Source="/Resources/Icons/screenshot.png"
+                                    Style="{DynamicResource imageButton}" />
+                            </Button>
+                            <Separator />-->
+                        </ToolBar>
+                        <Grid Grid.Column="1">
+                            <DockPanel Margin="5,0,5,0" LastChildFill="False">
+                                <GroupBox
+                                    Margin="5,0,5,0"
+                                    DockPanel.Dock="Right"
+                                    FontWeight="Bold"
+                                    Header="CAM1 Status">
+                                    <Border
+                                        x:Name="bdCam1Status"
+                                        Margin="2"
+                                        Background="{Binding Cam2Status, Converter={StaticResource MainStatusColorConverter}, FallbackValue='Gray'}"
+                                        BorderBrush="White"
+                                        BorderThickness="0.7"
+                                        CornerRadius="5">
+                                        <Label
+                                            x:Name="lbCam1Status"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Content="{Binding Cam2Status, Converter={StaticResource MainStatusConverter}, FallbackValue='UNKNOWN'}"
+                                            FontSize="12"
+                                            FontWeight="Bold"
+                                            Foreground="White" />
+                                    </Border>
+                                </GroupBox>
+                                <GroupBox
+                                    Margin="5,0,5,0"
+                                    DockPanel.Dock="Right"
+                                    FontWeight="Bold"
+                                    Header="CAM2 Status">
+                                    <Border
+                                        x:Name="bdCam2Status"
+                                        Margin="2"
+                                        Background="{Binding Cam1Status, Converter={StaticResource MainStatusColorConverter}, FallbackValue='Gray'}"
+                                        BorderBrush="White"
+                                        BorderThickness="0.7"
+                                        CornerRadius="5">
+                                        <Label
+                                            x:Name="lbCam2Status"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Content="{Binding Cam1Status, Converter={StaticResource MainStatusConverter}, FallbackValue='UNKNOWN'}"
+                                            FontSize="12"
+                                            FontWeight="Bold"
+                                            Foreground="White" />
+                                    </Border>
+                                </GroupBox>
+                                <GroupBox
+                                    Margin="5,0,5,0"
+                                    DockPanel.Dock="Right"
+                                    FontWeight="Bold"
+                                    Header="PLC Status">
+                                    <Border
+                                        x:Name="bdPlcStatus"
+                                        Margin="2"
+                                        Background="{Binding PlcStatus, Converter={StaticResource MainStatusColorConverter}, FallbackValue='Gray'}"
+                                        BorderBrush="White"
+                                        BorderThickness="0.7"
+                                        CornerRadius="5">
+                                        <Label
+                                            x:Name="lbPlcStatus"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Content="{Binding PlcStatus, Converter={StaticResource MainStatusConverter}, FallbackValue='UNKNOWN'}"
+                                            FontSize="12"
+                                            FontWeight="Bold"
+                                            Foreground="White" />
+                                    </Border>
+                                </GroupBox>
+                                <GroupBox
+                                    Margin="5,0,5,0"
+                                    DockPanel.Dock="Right"
+                                    FontWeight="Bold"
+                                    Header="AI Status">
+                                    <Border
+                                        x:Name="bdAiStatus"
+                                        Margin="2"
+                                        Background="{Binding AiStatus, Converter={StaticResource MainStatusColorConverter}, FallbackValue='Gray'}"
+                                        BorderBrush="White"
+                                        BorderThickness="0.7"
+                                        CornerRadius="5">
+                                        <Label
+                                            x:Name="lbAiStatus"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Content="{Binding AiStatus, Converter={StaticResource MainStatusConverter}, FallbackValue='UNKNOWN'}"
+                                            FontSize="12"
+                                            FontWeight="Bold"
+                                            Foreground="White" />
+                                    </Border>
+                                </GroupBox>
+                            </DockPanel>
+                        </Grid>
+                    </Grid>
+                </DockPanel>
+            </Grid>
+        </Grid>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition />
+                <ColumnDefinition />
+                <ColumnDefinition Width="350" />
+            </Grid.ColumnDefinitions>
+            <Grid Grid.Column="0">
+                <GroupBox
+                    Margin="5"
+                    BorderBrush="Black"
+                    BorderThickness="1"
+                    FontWeight="Bold"
+                    Header="CAMERA 1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="1*" />
+                            <RowDefinition Height="1*" />
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+                            <Label
+                                Grid.ColumnSpan="2"
+                                Margin="0,-8,0,0"
+                                HorizontalAlignment="Center"
+                                Content="White Light" />
+                            <Border
+                                Grid.Column="0"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                Cursor="Hand"
+                                IsEnabled="{Binding ElementName=imbCam1WhiteOrigin, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Image x:Name="imbCam1WhiteOrigin" />
+                            </Border>
+                            <Border
+                                Grid.Column="1"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                IsEnabled="{Binding ElementName=imbCam1WhiteResult, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Image x:Name="imbCam1WhiteResult" />
+                            </Border>
+                        </Grid>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+                            <Label
+                                Grid.ColumnSpan="2"
+                                Margin="0,-6,0,0"
+                                HorizontalAlignment="Center"
+                                Content="UV Light"
+                                Foreground="Purple" />
+                            <Border
+                                Grid.Column="0"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                IsEnabled="{Binding ElementName=imbCam1UvOrigin, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Image x:Name="imbCam1UvOrigin" />
+                            </Border>
+                            <Border
+                                Grid.Column="1"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                IsEnabled="{Binding ElementName=imbCam1UvResult, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Image x:Name="imbCam1UvResult" />
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </GroupBox>
+            </Grid>
+            <Grid Grid.Column="1">
+                <GroupBox
+                    Margin="5"
+                    BorderBrush="Black"
+                    BorderThickness="1"
+                    FontWeight="Bold"
+                    Header="CAMERA 2">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="1*" />
+                            <RowDefinition Height="1*" />
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+                            <Label
+                                Grid.ColumnSpan="2"
+                                Margin="0,-8,0,0"
+                                HorizontalAlignment="Center"
+                                Content="White Light" />
+                            <Border
+                                Grid.Column="0"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                IsEnabled="{Binding ElementName=imbCam2WhiteOrigin, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Image x:Name="imbCam2WhiteOrigin" />
+                            </Border>
+                            <Border
+                                Grid.Column="1"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                IsEnabled="{Binding ElementName=imbCam2WhiteResult, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Image x:Name="imbCam2WhiteResult" />
+                            </Border>
+                        </Grid>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+                            <Label
+                                Grid.ColumnSpan="2"
+                                Margin="0,-6,0,0"
+                                HorizontalAlignment="Center"
+                                Content="UV Light"
+                                Foreground="Purple" />
+                            <Border
+                                Grid.Column="0"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                IsEnabled="{Binding ElementName=imbCam2UvOrigin, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Image x:Name="imbCam2UvOrigin" />
+                            </Border>
+                            <Border
+                                Grid.Column="1"
+                                Margin="5,15,5,5"
+                                Background="LightGray"
+                                BorderBrush="DarkGray"
+                                BorderThickness="2"
+                                IsEnabled="{Binding ElementName=imbCam2UvResult, Path=Source, Converter={StaticResource NullToBoolConverter}}"
+                                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Cursor" Value="Arrow" />
+
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Cursor" Value="Hand" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Image x:Name="imbCam2UvResult" />
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </GroupBox>
+            </Grid>
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="256" />
+                    <RowDefinition Height="317" />
+                    <RowDefinition />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <GroupBox
+                        Margin="5"
+                        BorderBrush="Gray"
+                        BorderThickness="1"
+                        Header="Statistics">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="5*" />
+                                <RowDefinition Height="22*" />
+                                <RowDefinition Height="5*" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                                    <Label Content="Working Shift:" />
+                                    <Label
+                                        Name="lbWorkingShift"
+                                        Content="7:00 - 18:30"
+                                        FontWeight="Bold"
+                                        Foreground="DarkBlue" />
+                                    <Label Content="---" />
+                                    <Label Content="Start Date:" />
+                                    <Label
+                                        Name="lbDate"
+                                        Content="16/01/2026"
+                                        FontWeight="Bold"
+                                        Foreground="DarkBlue" />
+                                </StackPanel>
+
+                            </Grid>
+                            <lvc:PieChart
+                                Grid.Row="1"
+                                LegendLocation="Right"
+                                Series="{Binding PieSeriesCollection}" />
+                            <Grid Grid.Row="2">
+                                <StackPanel
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                                    <Label
+                                        Content="OK"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="Green" />
+                                    <TextBox
+                                        Name="tbOKCount"
+                                        Width="50"
+                                        Margin="2,0,0,0"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        BorderBrush="DarkGray"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="Green"
+                                        IsReadOnly="True" />
+                                    <Label
+                                        Margin="10,0,0,0"
+                                        Content="NG"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="Red" />
+                                    <TextBox
+                                        Name="tbNGCount"
+                                        Width="50"
+                                        Margin="2,0,0,0"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        BorderBrush="DarkGray"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="Red"
+                                        IsReadOnly="True" />
+                                    <Label
+                                        Margin="10,0,0,0"
+                                        Content="WARNING"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="DarkOrange" />
+                                    <TextBox
+                                        Name="tbWarningCount"
+                                        Width="50"
+                                        Margin="2,0,0,0"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        BorderBrush="DarkGray"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="DarkOrange"
+                                        IsReadOnly="True" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </GroupBox>
+                </Grid>
+                <Grid Grid.Row="1">
+                    <GroupBox
+                        Margin="5"
+                        BorderBrush="Gray"
+                        BorderThickness="1"
+                        Header="Inspection Infos">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="60" />
+                                <RowDefinition />
+                                <RowDefinition Height="35" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,5,0,0">
+                                <Border
+                                    x:Name="bdInspectionStatus"
+                                    Margin="85,0,85,0"
+                                    Background="{Binding InspectionStatus, Converter={StaticResource MainStatusColorConverter}, FallbackValue='Gray'}"
+                                    BorderBrush="Gray"
+                                    BorderThickness="0.7"
+                                    CornerRadius="5"
+                                    DockPanel.Dock="Left">
+                                    <Label
+                                        x:Name="lbInspectionStatus"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Content="{Binding InspectionStatus, Converter={StaticResource MainInspectionStatusConverter}, FallbackValue='UNKNOWN'}"
+                                        FontSize="24"
+                                        FontWeight="Bold"
+                                        Foreground="{Binding InspectionStatus, Converter={StaticResource TextColorConverter}}" />
+                                </Border>
+                            </Grid>
+                            <Grid Grid.Row="1" Margin="0,5,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="1*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.Resources>
+                                    <Style x:Key="stLabel" TargetType="Label">
+                                        <Setter Property="Width" Value="90" />
+                                        <Setter Property="FontSize" Value="12" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                                        <Setter Property="FontWeight" Value="Bold" />
+                                        <Setter Property="Foreground" Value="Gray" />
+                                    </Style>
+                                    <Style x:Key="stInfo" TargetType="Label">
+                                        <Setter Property="Width" Value="Auto" />
+                                        <Setter Property="FontSize" Value="14" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                                        <Setter Property="FontWeight" Value="Bold" />
+                                        <Setter Property="Foreground" Value="DarkBlue" />
+                                    </Style>
+                                </Grid.Resources>
+                                <Grid Grid.Column="0">
+                                    <DockPanel LastChildFill="False">
+                                        <Label
+                                            HorizontalAlignment="Center"
+                                            Content="CAM1"
+                                            DockPanel.Dock="Top"
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Foreground="#1A43BF" />
+                                        <Separator Margin="15,-5,15,0" DockPanel.Dock="Top" />
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Status:" Style="{DynamicResource stLabel}" />
+                                            <Border
+                                                x:Name="bdStatusCam1"
+                                                Width="45"
+                                                Height="Auto"
+                                                Background="{Binding InspectionStatusCam1, FallbackValue='Gray', Converter={StaticResource MainStatusColorConverter}}"
+                                                BorderBrush="Gray"
+                                                BorderThickness="0.7"
+                                                CornerRadius="5">
+                                                <Label
+                                                    x:Name="lbStatusCam1"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Content="{Binding InspectionStatusCam1, FallbackValue='N/A', Converter={StaticResource MainResCamStatusConverter}}"
+                                                    FontSize="16"
+                                                    FontWeight="Bold"
+                                                    Foreground="{Binding InspectionStatusCam1, Converter={StaticResource TextColorConverter}}" />
+                                            </Border>
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Finish Time:" Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbFinishTimeCam1"
+                                                HorizontalAlignment="Center"
+                                                Content="{Binding TimeStamp, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Min Distance:" Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbMinDisCam1"
+                                                HorizontalAlignment="Center"
+                                                Content="{Binding SelectedImagePath.X, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Max Distance:" Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbMaxDisCam1"
+                                                HorizontalAlignment="Center"
+                                                Content="{Binding SelectedImagePath.Y, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label
+                                                Width="96"
+                                                Content="UV Disk Count:"
+                                                Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbUvDiskCountCam1"
+                                                Width="45"
+                                                Content="{Binding TimeStamp, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+                                    </DockPanel>
+                                </Grid>
+                                <Grid Grid.Column="1">
+                                    <Border
+                                        Width="1"
+                                        Margin="0,5,0,5"
+                                        Background="DarkGray" />
+                                </Grid>
+                                <Grid Grid.Column="2">
+                                    <DockPanel LastChildFill="False">
+                                        <Label
+                                            HorizontalAlignment="Center"
+                                            Content="CAM2"
+                                            DockPanel.Dock="Top"
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Foreground="#1A43BF" />
+                                        <Separator Margin="15,-5,15,0" DockPanel.Dock="Top" />
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Status:" Style="{DynamicResource stLabel}" />
+                                            <Border
+                                                x:Name="bdStatusCam2"
+                                                Width="45"
+                                                Height="Auto"
+                                                Background="{Binding InspectionStatusCam2, FallbackValue='Gray', Converter={StaticResource MainStatusColorConverter}}"
+                                                BorderBrush="Gray"
+                                                BorderThickness="0.7"
+                                                CornerRadius="5">
+                                                <Label
+                                                    x:Name="lbStatusCam2"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Content="{Binding InspectionStatusCam2, FallbackValue='N/A', Converter={StaticResource MainResCamStatusConverter}}"
+                                                    FontSize="16"
+                                                    FontWeight="Bold"
+                                                    Foreground="{Binding InspectionStatusCam2, Converter={StaticResource TextColorConverter}}" />
+                                            </Border>
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Finish Time:" Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbFinishTimeCam2"
+                                                HorizontalAlignment="Center"
+                                                Content="{Binding TimeStamp, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Min Distance:" Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbMinDisCam2"
+                                                HorizontalAlignment="Center"
+                                                Content="{Binding SelectedImagePath.X, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label Content="Max Distance:" Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbMaxDisCam2"
+                                                HorizontalAlignment="Center"
+                                                Content="{Binding SelectedImagePath.Y, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" LastChildFill="True">
+                                            <Label
+                                                Width="96"
+                                                Content="UV Disk Count:"
+                                                Style="{DynamicResource stLabel}" />
+                                            <Label
+                                                x:Name="lbUvDiskCountCam2"
+                                                Width="45"
+                                                Content="{Binding TimeStamp, FallbackValue='N/A'}"
+                                                Style="{DynamicResource stInfo}" />
+                                        </DockPanel>
+
+                                    </DockPanel>
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="2" Margin="0,-10,0,0">
+                                <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                                    <Label
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Content="Timestamp:"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="Gray" />
+                                    <Label
+                                        Name="lbTimestamp"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Content="N/A"
+                                        FontSize="14"
+                                        FontWeight="Bold"
+                                        Foreground="DarkBlue" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </GroupBox>
+                </Grid>
+                <Grid Grid.Row="2">
+                    <GroupBox
+                        Margin="5"
+                        BorderBrush="Gray"
+                        BorderThickness="1"
+                        Header="Messages">
+                        <ListBox x:Name="LogListBox" ItemsSource="{Binding Logger.Logs}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <Run Foreground="Gray" Text="{Binding TimeText, Mode=OneWay}" />
+                                        <Run Text=" [" />
+                                        <Run FontWeight="Bold" Text="{Binding Source, Mode=OneWay}" />
+                                        <Run Text="] " />
+                                        <Run Text="{Binding Message, Mode=OneWay}">
+                                            <Run.Style>
+                                                <Style TargetType="Run">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Level}" Value="Error">
+                                                            <Setter Property="Foreground" Value="Red" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Level}" Value="Warning">
+                                                            <Setter Property="Foreground" Value="Orange" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Level}" Value="Success">
+                                                            <Setter Property="Foreground" Value="LimeGreen" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Run.Style>
+                                        </Run>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </GroupBox>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
