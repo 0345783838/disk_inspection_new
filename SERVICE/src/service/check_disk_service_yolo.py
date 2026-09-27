@@ -423,6 +423,61 @@ class DiskCheckingService(BaseService):
             new_boxes.append([x_min, y_min, x_max, y_max])
         return np.array(new_boxes, dtype=np.float32)
 
+    @staticmethod
+    def split_rows(boxes, expected_rows=3):
+        """Split detected point boxes into top-to-bottom rows."""
+        boxes = np.asarray(boxes, dtype=np.float32)
+        if boxes.ndim != 2 or boxes.shape[1] != 4 or len(boxes) < expected_rows:
+            raise ValueError("Not enough valid point boxes to split rows")
+        if expected_rows != 3:
+            raise ValueError("Only the three-point-row layout is supported")
+
+        centers_y = (boxes[:, 1] + boxes[:, 3]) / 2.0
+        order = np.argsort(centers_y)
+        boxes_sorted = boxes[order]
+        centers_y = centers_y[order]
+
+        gaps = np.diff(centers_y)
+        if len(gaps) < expected_rows - 1:
+            raise ValueError("Cannot find three point rows")
+        split_indexes = np.sort(np.argsort(gaps)[-(expected_rows - 1):])
+        rows = np.split(boxes_sorted, split_indexes + 1)
+        if len(rows) != expected_rows or any(len(row) == 0 for row in rows):
+            raise ValueError("Cannot find three point rows")
+
+        # Keep every row deterministic and make representative box selection stable.
+        return tuple(row[np.argsort((row[:, 0] + row[:, 2]) / 2.0)] for row in rows)
+
+    def full_rectify_pipeline(self, image, row1, row3, expand_ratio_x=0.10, expand_ratio_y=0.10):
+        """Rectify the tray from the outer point rows and return source crop geometry."""
+        left_top_box = row1[np.argmin(row1[:, 0])]
+        right_top_box = row1[np.argmax(row1[:, 2])]
+        left_bottom_box = row3[np.argmin(row3[:, 0])]
+        right_bottom_box = row3[np.argmax(row3[:, 2])]
+
+        quad = np.array([
+            [left_top_box[0], left_top_box[1]],
+            [right_top_box[2], right_top_box[1]],
+            [right_bottom_box[2], right_bottom_box[3]],
+            [left_bottom_box[0], left_bottom_box[3]],
+        ], dtype=np.float32)
+        quad = self.order_quad_pts(quad)
+        quad = self.expand_quad_towards_center(quad, expand_ratio_x, expand_ratio_y)
+
+        # The returned quad is reused on the UV frame, whose validation requires
+        # source-image coordinates to remain inside the image.
+        quad[:, 0] = np.clip(quad[:, 0], 0, image.shape[1] - 1)
+        quad[:, 1] = np.clip(quad[:, 1], 0, image.shape[0] - 1)
+
+        width, height = self.quad_to_rect_size(quad)
+        destination = np.array([
+            [0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]
+        ], dtype=np.float32)
+        matrix = cv2.getPerspectiveTransform(quad, destination)
+        warped = cv2.warpPerspective(image, matrix, (width, height), flags=cv2.INTER_LINEAR,
+                                     borderMode=cv2.BORDER_REPLICATE)
+        return warped, matrix, (width, height), quad
+
     # ---------- Example usage ----------
     # image: original image
     # row1, row3: arrays of boxes for top and bottom rows (format [x1,y1,x2,y2])
@@ -535,6 +590,37 @@ class DiskCheckingService(BaseService):
 
         crop = image[box[1]:box[3], box[0]:box[2]]
         return crop, box
+
+    @staticmethod
+    def crop_between_rows(image, upper_row, lower_row, ratio=0.35, direction='top'):
+        """Crop a horizontal band between two rectified point rows.
+
+        ``bottom`` anchors the band at the top of the lower row; ``top`` anchors
+        it at the bottom of the upper row. This preserves the old three-row
+        measurement geometry while using the whole row instead of an arbitrary box.
+        """
+        upper_bottom = int(round(float(np.median(upper_row[:, 3]))))
+        lower_top = int(round(float(np.median(lower_row[:, 1]))))
+        gap = lower_top - upper_bottom
+        if gap <= 0:
+            raise ValueError("Point rows overlap after rectification")
+
+        crop_height = max(1, int(round(gap * ratio)))
+        if direction == 'bottom':
+            y2 = lower_top
+            y1 = y2 - crop_height
+        elif direction == 'top':
+            y1 = upper_bottom
+            y2 = y1 + crop_height
+        else:
+            raise ValueError("direction must be 'top' or 'bottom'")
+
+        y1 = max(0, y1)
+        y2 = min(image.shape[0], y2)
+        if y2 <= y1:
+            raise ValueError("Invalid segmentation region")
+        box = [0, y1, image.shape[1], y2]
+        return image[y1:y2, :], box
 
     def get_caliper_result(self, img, center):
         res = self.caliper.measure(img, center=center)
@@ -686,72 +772,81 @@ class DiskCheckingService(BaseService):
     def _check_white(self, image, params, debug=False):
         boxes, confs, cls_idxs = self.disk_point_detect_model.detect_objects_debug(
             image, params.detect_threshold, params.detect_iou)
-        if len(boxes) < params.disk_num:
+        expected_rows = 3
+        if len(boxes) < params.disk_num * expected_rows:
             return self._white_failure(image, debug)
         detect_image = None
         if debug:
             detect_image = image.copy()
             self.draw_detected_boxes(detect_image, boxes, confs, cls_idxs)
 
-        # Groups the boxes by lines
-        middle_boxes = self.get_center_row(boxes, image.shape[0])
-
-        if len(middle_boxes) == 0:
+        # Group point detections into the three physical rows.
+        try:
+            boxes_l1, boxes_l2, boxes_l3 = self.split_rows(boxes, expected_rows=expected_rows)
+        except ValueError:
+            return self._white_failure(image, debug)
+        if any(len(row) < params.disk_num for row in (boxes_l1, boxes_l2, boxes_l3)):
             return self._white_failure(image, debug)
 
-        # Align image by boxes
-        crop_img, crop_rect = self.crop_by_boxes(image, middle_boxes, expand_ratio_x=0.15)
+        # Rectify the complete tray from the two outer point rows.
+        crop_img, matrix, (crop_width, _), crop_quad = self.full_rectify_pipeline(
+            image, boxes_l1, boxes_l3, expand_ratio_x=0.2, expand_ratio_y=0.1)
 
-        # Update all boxes coordinates to warped image
-        boxes_middle = self.update_boxes_after_crop(middle_boxes, crop_rect)
+        boxes_l1 = self.update_boxes_after_warp(boxes_l1, matrix)
+        boxes_l2 = self.update_boxes_after_warp(boxes_l2, matrix)
+        boxes_l3 = self.update_boxes_after_warp(boxes_l3, matrix)
 
-        # Get the coordinate for the UV image
-        uv_box_l1 = self.get_uv_box(middle_boxes[0], crop_img.shape[1], start_ratio=0.0, ratio_height=2.0, direction="bottom")
-        uv_box_l3 = self.get_uv_box(middle_boxes[0], crop_img.shape[1],  start_ratio=0.0, ratio_height=2.0, direction="top")
+        # The UV contract remains two regions: below row 1 and above row 3.
+        row1_reference = np.median(boxes_l1, axis=0)
+        row3_reference = np.median(boxes_l3, axis=0)
+        uv_box_l1 = self.get_uv_box(row1_reference, crop_width, start_ratio=0.0,
+                                    ratio_height=2.0, direction="bottom")
+        uv_box_l3 = self.get_uv_box(row3_reference, crop_width, start_ratio=0.0,
+                                    ratio_height=2.0, direction="top")
 
-        # Get the point boxes by lines
-        line_rects_top = self.get_line_boxes_ratio_shift(crop_img, boxes_middle, "top")
-        line_rects_bottom = self.get_line_boxes_ratio_shift(crop_img, boxes_middle, "bottom")
+        # Classify all four faces around the three point rows. Merge each face
+        # independently so boxes at the same X on different rows are not combined.
+        classify_regions = (
+            (boxes_l1, "bottom"),
+            (boxes_l2, "top"),
+            (boxes_l2, "bottom"),
+            (boxes_l3, "top"),
+        )
+        ng_groups = []
+        no_disk_groups = []
+        for row_boxes, direction in classify_regions:
+            rects = self.get_line_boxes_ratio_shift(crop_img, row_boxes, direction)
+            crops = self.crop_boxes(crop_img, rects, direction)
+            if not crops or any(crop.size == 0 for crop in crops):
+                return self._white_failure(image, debug)
 
-        # Crop the boxes by lines
-        line_middle_crops_top = self.crop_boxes(crop_img, line_rects_top, "top")
-        line_middle_crops_bottom = self.crop_boxes(crop_img, line_rects_bottom, "bottom")
+            labels, class_confidences = self.point_classification_model.predict_batch(crops)
+            if labels is None or class_confidences is None:
+                raise RuntimeError("Classification inference failed")
 
-        if not line_middle_crops_top or not line_middle_crops_bottom or any(
-                crop.size == 0 for crop in line_middle_crops_top + line_middle_crops_bottom):
-            raise ValueError("Invalid classification region")
+            ng_groups.append(self.merge_boxes_1d_x([
+                (box, confidence)
+                for label, box, confidence in zip(labels, rects, class_confidences)
+                if label == ClassifyResult.NG
+            ]))
+            no_disk_groups.append(self.merge_boxes_1d_x([
+                (box, confidence)
+                for label, box, confidence in zip(labels, rects, class_confidences)
+                if label == ClassifyResult.NO_DISK
+            ]))
 
-        # Classify the crops
-        cls_res_middle_top, cls_conf_middle_top = self.point_classification_model.predict_batch(line_middle_crops_top)
-        cls_res_middle_bottom, cls_conf_middle_bottom = self.point_classification_model.predict_batch(line_middle_crops_bottom)
+        ng_boxes = [box for group in ng_groups for box in group]
+        no_disk_boxes = [box for group in no_disk_groups for box in group]
 
-        if cls_res_middle_top is None or cls_res_middle_bottom is None:
-            raise RuntimeError("Classification inference failed")
-
-        ng_boxes2 = [(box, conf) for label, box, conf in zip(cls_res_middle_top, line_rects_top, cls_conf_middle_top) if
-                     label == ClassifyResult.NG]
-        ng_boxes3 = [(box, conf) for label, box, conf in zip(cls_res_middle_bottom, line_rects_bottom, cls_conf_middle_bottom)
-                     if label == ClassifyResult.NG]
-
-        no_disk_boxes2 = [(box, conf) for label, box, conf in zip(cls_res_middle_top, line_rects_top, cls_conf_middle_top) if
-                          label == ClassifyResult.NO_DISK]
-        no_disk_boxes3 = [(box, conf) for label, box, conf in zip(cls_res_middle_bottom, line_rects_bottom, cls_conf_middle_bottom)
-                          if label == ClassifyResult.NO_DISK]
-
-        # Merge near boxes
-        ng_boxes2 = self.merge_boxes_1d_x(ng_boxes2)
-        ng_boxes3 = self.merge_boxes_1d_x(ng_boxes3)
-
-        no_disk_boxes2 = self.merge_boxes_1d_x(no_disk_boxes2)
-        no_disk_boxes3 = self.merge_boxes_1d_x(no_disk_boxes3)
-
-        # Get the final boxes
-        ng_boxes = ng_boxes2 + ng_boxes3
-        no_disk_boxes = no_disk_boxes2 + no_disk_boxes3
-
-        # Crop the segmentation area
-        crop_seg_1, box_seg_1 = self.crop_box_for_segmentation(crop_img, boxes_middle[0], direction='bottom')
-        crop_seg_2, box_seg_2 = self.crop_box_for_segmentation(crop_img, boxes_middle[0])
+        # Preserve the old three-row segmentation geometry: one band immediately
+        # above row 2 and one immediately below it.
+        try:
+            crop_seg_1, box_seg_1 = self.crop_between_rows(
+                crop_img, boxes_l1, boxes_l2, ratio=0.35, direction='bottom')
+            crop_seg_2, box_seg_2 = self.crop_between_rows(
+                crop_img, boxes_l2, boxes_l3, ratio=0.35, direction='top')
+        except ValueError:
+            return self._white_failure(image, debug)
 
         mask_seg_1, _ = self.disk_segmentor_yolo.segment_large_image_debug(crop_seg_1, params.segment_threshold, params.segment_iou)
         mask_seg_2, _ = self.disk_segmentor_yolo.segment_large_image_debug(crop_seg_2, params.segment_threshold, params.segment_iou)
@@ -766,10 +861,10 @@ class DiskCheckingService(BaseService):
             segment_image[box_seg_2[1]:box_seg_2[3], box_seg_2[0]:box_seg_2[2]] = mask_seg_2
 
         # Apply caliper at the production measurement positions.
-        center_1 = mask_seg_1.shape[1] // 2, int(mask_seg_1.shape[0] * 0.85)
-        center_2 = mask_seg_1.shape[1] // 2, int(mask_seg_1.shape[0] * 0.15)
-        center_3 = mask_seg_2.shape[1] // 2, mask_seg_2.shape[0] * 0.15
-        center_4 = mask_seg_2.shape[1] // 2, mask_seg_2.shape[0] * 0.85
+        center_1 = mask_seg_1.shape[1] // 2, int(mask_seg_1.shape[0] * 0.75)
+        center_2 = mask_seg_1.shape[1] // 2, int(mask_seg_1.shape[0] * 0.25)
+        center_3 = mask_seg_2.shape[1] // 2, int(mask_seg_2.shape[0] * 0.25)
+        center_4 = mask_seg_2.shape[1] // 2, int(mask_seg_2.shape[0] * 0.75)
         caliper_res_1 = self.caliper.measure_with_params(mask_seg_1, center_1, params.caliper_min_edge_distance, params.caliper_max_edge_distance, params.caliper_length_rate, params.caliper_thickness_list)
         caliper_res_2 = self.caliper.measure_with_params(mask_seg_1, center_2, params.caliper_min_edge_distance, params.caliper_max_edge_distance, params.caliper_length_rate, params.caliper_thickness_list)
         caliper_res_3 = self.caliper.measure_with_params(mask_seg_2, center_3, params.caliper_min_edge_distance, params.caliper_max_edge_distance, params.caliper_length_rate, params.caliper_thickness_list)
@@ -842,7 +937,7 @@ class DiskCheckingService(BaseService):
                                      DetectImg=self._convert_2_base64(detect_image),
                                      SegmentImg=self._convert_2_base64(segment_image),
                                      FinalImg=self._convert_2_base64(crop_img),
-                                     CropBox=str(crop_rect), UvBox1=str(uv_box_l1.tolist()),
+                                     CropBox=str(crop_quad.tolist()), UvBox1=str(uv_box_l1.tolist()),
                                      UvBox2=str(uv_box_l3.tolist()), Mid1=str(mids_1), Mid2=str(mids_3))
 
         return DataResponse(Result=sum_res,
@@ -851,7 +946,7 @@ class DiskCheckingService(BaseService):
                             ResImg=self._convert_2_base64(crop_img),
                             MaxDiskDistance=max_disk_distance,
                             MinDiskDistance=min_disk_distance,
-                            CropBox=str(crop_rect),
+                            CropBox=str(crop_quad.tolist()),
                             UvBox1=str(uv_box_l1.tolist()),
                             UvBox2=str(uv_box_l3.tolist()),
                             Mid1=str(mids_1),
@@ -1087,39 +1182,45 @@ if __name__ == '__main__':
         boxes, confs, cls_idxs = disk_checking_service.disk_point_detect_model(image)
 
 
-        # Groups the boxes by lines
-        middle_boxes = disk_checking_service.get_center_row(boxes, image.shape[0])
-
-        # Align image by boxes
-        crop_img, crop_rect = disk_checking_service.crop_by_boxes(image, middle_boxes, expand_ratio_x=0.15)
-
-        # Update all boxes coordinates to warped image
-        boxes_middle = disk_checking_service.update_boxes_after_crop(middle_boxes, crop_rect)
+        # Group and rectify the three point rows exactly as the production path.
+        boxes_l1, boxes_l2, boxes_l3 = disk_checking_service.split_rows(boxes)
+        crop_img, matrix, _, _ = disk_checking_service.full_rectify_pipeline(
+            image, boxes_l1, boxes_l3, expand_ratio_x=0.2, expand_ratio_y=0.1)
+        boxes_l1 = disk_checking_service.update_boxes_after_warp(boxes_l1, matrix)
+        boxes_l2 = disk_checking_service.update_boxes_after_warp(boxes_l2, matrix)
+        boxes_l3 = disk_checking_service.update_boxes_after_warp(boxes_l3, matrix)
 
         # region GET THE CLASSIFICATION BOXES
 
-        # Get the point boxes by lines
-        line_rects_top = disk_checking_service.get_line_boxes_ratio_shift(crop_img, boxes_middle, "top")
-        line_rects_bottom = disk_checking_service.get_line_boxes_ratio_shift(crop_img, boxes_middle, "bottom")
+        classify_regions = (
+            (boxes_l1, "bottom"),
+            (boxes_l2, "top"),
+            (boxes_l2, "bottom"),
+            (boxes_l3, "top"),
+        )
+        region_crops = []
+        for row_boxes, direction in classify_regions:
+            rects = disk_checking_service.get_line_boxes_ratio_shift(crop_img, row_boxes, direction)
+            region_crops.append(disk_checking_service.crop_boxes(crop_img, rects, direction))
 
-        # Crop the boxes by lines
-        line_middle_crops_top = disk_checking_service.crop_boxes(crop_img, line_rects_top, "top")
-        line_middle_crops_bottom = disk_checking_service.crop_boxes(crop_img, line_rects_bottom, "bottom")
-
-        for i, crop_rect in enumerate(line_middle_crops_top):
+        bottom_crops = region_crops[0] + region_crops[2]
+        top_crops = region_crops[1] + region_crops[3]
+        for i, crop_rect in enumerate(bottom_crops):
             img_name = os.path.basename(path).replace('.bmp', f'_{i}.bmp')
             cv2.imwrite(fr"{save_path_bottom_rect}/{img_name}", crop_rect)
 
-        for j, crop_rect in enumerate(line_middle_crops_bottom):
-            img_name = os.path.basename(path).replace('.bmp', f'_{i + j + 1}.bmp')
+        for j, crop_rect in enumerate(top_crops):
+            img_name = os.path.basename(path).replace('.bmp', f'_{len(bottom_crops) + j}.bmp')
             cv2.imwrite(fr"{save_path_top_rect}/{img_name}", crop_rect)
 
         # endregion
 
         # region GET THE CROPS FOR SEGMENTATION
 
-        crop_seg_1, _ = disk_checking_service.crop_box_for_segmentation(crop_img, boxes_middle[0], direction='bottom')
-        crop_seg_2, _ = disk_checking_service.crop_box_for_segmentation(crop_img, boxes_middle[0])
+        crop_seg_1, _ = disk_checking_service.crop_between_rows(
+            crop_img, boxes_l1, boxes_l2, ratio=0.35, direction='bottom')
+        crop_seg_2, _ = disk_checking_service.crop_between_rows(
+            crop_img, boxes_l2, boxes_l3, ratio=0.35, direction='top')
         # crop boxes
         def crop_images(image):
             H, W = image.shape[:2]

@@ -17,15 +17,15 @@ namespace DiskInspection.Models
         public float CaliperMinEdgeDistance { get; set; }
         public float CaliperMaxEdgeDistance { get; set; }
         public float CaliperLengthRate { get; set; }
-        public List<int> CaliperThicknessList { get; set; }
+        public List<int> CaliperThicknessList { get; set; } = new List<int> { 3, 5, 7 };
 
         public int DiskNumber { get; set; }
         public float DiskMaxDistance { get; set; }
         public float DiskMinDistance { get; set; }
         public float DiskMinArea { get; set; }
 
-        public List<int> UvLowerThreshold { get; set; }
-        public List<int> UvUpperThreshold { get; set; }
+        public List<int> UvLowerThreshold { get; set; } = new List<int> { 107, 35, 40 };
+        public List<int> UvUpperThreshold { get; set; } = new List<int> { 119, 150, 250 };
         public float UvMinArea { get; set; }
 
         public EnvironmentConfig() { }
@@ -40,13 +40,19 @@ namespace DiskInspection.Models
             CaliperMinEdgeDistance = caliperMinEdgeDistance;
             CaliperMaxEdgeDistance = caliperMaxEdgeDistance;
             CaliperLengthRate = caliperLengthRate;
-            CaliperThicknessList = caliperThicknessList;
+            CaliperThicknessList = caliperThicknessList != null && caliperThicknessList.Count > 0
+                ? new List<int>(caliperThicknessList)
+                : new List<int> { 3, 5, 7 };
             DiskNumber = diskNumber;
             DiskMaxDistance = diskMaxDistance;
             DiskMinDistance = diskMinDistance;
             DiskMinArea = diskMinArea;
-            UvLowerThreshold = uvLowerThreshold;
-            UvUpperThreshold = uvUpperThreshold;
+            UvLowerThreshold = uvLowerThreshold != null && uvLowerThreshold.Count == 3
+                ? new List<int>(uvLowerThreshold)
+                : new List<int> { 107, 35, 40 };
+            UvUpperThreshold = uvUpperThreshold != null && uvUpperThreshold.Count == 3
+                ? new List<int>(uvUpperThreshold)
+                : new List<int> { 119, 150, 250 };
             UvMinArea = uvMinArea;
         }
     }

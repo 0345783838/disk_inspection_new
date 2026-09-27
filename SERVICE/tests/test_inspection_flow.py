@@ -1,4 +1,5 @@
 """Regression tests run without cameras, PLC connections or ONNX inference."""
+import ast
 import io
 import sys
 import threading
@@ -78,15 +79,26 @@ class PipelineTests(unittest.TestCase):
         s.min_disk_area = 0
         s.uv_disk_lower_threshold, s.uv_disk_upper_threshold = (107, 35, 40), (119, 150, 250)
         s.uv_min_disk_area = 0
-        self.boxes = np.array([[40 + i * 28, 90, 50 + i * 28, 100] for i in range(25)], dtype=np.float32)
+        self.rows = [
+            np.array([[40 + i * 28, y, 50 + i * 28, y + 10] for i in range(25)], dtype=np.float32)
+            for y in (35, 90, 145)
+        ]
+        self.boxes = np.vstack(self.rows)
         s.disk_point_detect_model = types.SimpleNamespace(conf_threshold=.1, iou_threshold=.1,
-            labels=['point'], detect_objects_debug=lambda *args: (self.boxes.copy(), np.ones(25), np.zeros(25, dtype=int)))
+            labels=['point'], detect_objects_debug=lambda *args: (
+                self.boxes.copy(), np.ones(len(self.boxes)), np.zeros(len(self.boxes), dtype=int)))
         s.disk_segmentor_yolo = types.SimpleNamespace(conf_threshold=.5, iou_threshold=.8,
             segment_large_image_debug=lambda image, *args: (stripe_mask(*image.shape[:2], 5), None))
         self.label = 'ok'
+        self.classify_batch_calls = 0
+
+        def classify(images):
+            self.classify_batch_calls += 1
+            return [self.label] * len(images), [1.] * len(images)
+
         s.point_classification_model = types.SimpleNamespace(
-            predict_batch=lambda images: ([self.label] * len(images), [1.] * len(images)))
-        self.image = np.zeros((200, 800, 3), dtype=np.uint8)
+            predict_batch=classify)
+        self.image = np.zeros((220, 800, 3), dtype=np.uint8)
 
     def test_white_debug_matches_production_for_all_classification_states(self):
         for label, expected in [('ok', 0), ('ng', 1), ('no_disk', 2)]:
@@ -100,6 +112,27 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(prod.ResImg, debug.FinalImg)
                 for field in ['CropBox', 'UvBox1', 'UvBox2', 'Mid1', 'Mid2']:
                     self.assertEqual(getattr(prod, field), getattr(debug, field))
+
+    def test_white_classifies_all_four_faces_around_three_point_rows(self):
+        self.classify_batch_calls = 0
+        result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual(result.Result, 0)
+        self.assertEqual(self.classify_batch_calls, 4)
+        self.service._validate_uv_geometry(
+            self.image,
+            np.array(ast.literal_eval(result.CropBox), dtype=np.float32),
+            np.array(ast.literal_eval(result.UvBox1), dtype=np.int32),
+            np.array(ast.literal_eval(result.UvBox2), dtype=np.int32),
+            np.array(ast.literal_eval(result.Mid1), dtype=np.float32),
+            np.array(ast.literal_eval(result.Mid2), dtype=np.float32),
+        )
+
+    def test_rejects_when_one_point_row_is_short_even_if_total_count_is_enough(self):
+        self.boxes = np.vstack((self.rows[0], self.rows[0][:1], self.rows[1][:-1], self.rows[2]))
+        result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual(result.Result, 1)
+        self.assertEqual(result.ErrorCode, 'ERROR_002')
+        self.assertIsNone(result.CropBox)
 
     def test_no_detections_rejects_without_uv_geometry(self):
         self.boxes = np.empty((0, 4), dtype=np.float32)

@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DiskInspection.Controllers;
+using DiskInspection.Models;
+using DiskInspection.Utils;
 
 namespace DiskInspection.Controllers
 {
@@ -39,6 +41,7 @@ internal static class FlowTests
         await Check("cancel waits for in-flight work", CancelDuringInference);
         await Check("queued images stay with their cycle", ImageSnapshots);
         await Check("image extension matches encoded bytes", ImageFormat);
+        await Check("missing array settings use safe defaults", ConfigArrayDefaults);
     }
     private static async Task Check(string name, Func<Task> test)
     {
@@ -154,6 +157,24 @@ internal static class FlowTests
         var path = Directory.GetFiles(folder, "*", SearchOption.AllDirectories).Single();
         var bytes = File.ReadAllBytes(path);
         Assert(Path.GetExtension(path) == ".jpg" && bytes[0] == 0xff && bytes[1] == 0xd8, "Extension and encoded format disagree.");
+        return Task.CompletedTask;
+    }
+    private static Task ConfigArrayDefaults()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "DiskInspectionFlowTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "config.env");
+        File.WriteAllText(path, "CALIPER_THICKNESS_LIST =\r\n");
+        var reader = new EnvReader(path);
+        Assert(reader.GetIntArray("CALIPER_THICKNESS_LIST", new[] { 3, 5, 7 }).SequenceEqual(new[] { 3, 5, 7 }),
+            "Missing caliper thickness did not use defaults.");
+
+        var config = new EnvironmentConfig(0.1f, 0.1f, 0.5f, 0.5f, 4, 25, 0.95f,
+            new List<int>(), 25, 9999, 40, 250, new List<int>(), new List<int>(), 20);
+        Assert(config.CaliperThicknessList.SequenceEqual(new[] { 3, 5, 7 }),
+            "Environment config retained an empty caliper thickness list.");
+        Assert(config.UvLowerThreshold.Count == 3 && config.UvUpperThreshold.Count == 3,
+            "Environment config retained invalid UV threshold arrays.");
         return Task.CompletedTask;
     }
 }

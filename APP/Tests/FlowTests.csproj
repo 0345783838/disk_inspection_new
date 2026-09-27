@@ -12,10 +12,15 @@
     <Reference Include="System.Core" />
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
+    <Reference Include="OpenTK">
+      <HintPath>..\packages\OpenTK.1.1.2225.0\lib\net20\OpenTK.dll</HintPath>
+    </Reference>
     <Compile Include="FlowTests.cs" />
     <Compile Include="..\DiskInspection\Controllers\InspectionSequence.cs" />
     <Compile Include="..\DiskInspection\Controllers\InspectionImageWriter.cs" />
     <Compile Include="..\DiskInspection\Controllers\ImageSaver.cs" />
+    <Compile Include="..\DiskInspection\Models\EnvironmentConfig.cs" />
+    <Compile Include="..\DiskInspection\Utils\EnvReader.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

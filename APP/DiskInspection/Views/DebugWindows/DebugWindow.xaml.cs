@@ -135,9 +135,12 @@ namespace DiskInspection.Views.DebugWindows
 
             _envConfig = new EnvironmentConfig(_envConfigRaw.GetFloat("DISK_POINT_DETECT_CONF_THRESH", (float) 0.2), _envConfigRaw.GetFloat("DISK_POINT_DETECT_IOU_THRESH", (float) 0.1),
                 _envConfigRaw.GetFloat("DISK_SEGMENT_CONF_THRESH", (float) 0.5), _envConfigRaw.GetFloat("DISK_SEGMENT_IOU_THRESH", (float)0.5), _envConfigRaw.GetFloat("CALIPER_MIN_EDGE_DISTANCE", 4), 
-                _envConfigRaw.GetFloat("CALIPER_MAX_EDGE_DISTANCE", 20), _envConfigRaw.GetFloat("CALIPER_LENGTH_RATE", (float)0.95), _envConfigRaw.GetIntArray("CALIPER_THICKNESS_LIST"), 
+                _envConfigRaw.GetFloat("CALIPER_MAX_EDGE_DISTANCE", 20), _envConfigRaw.GetFloat("CALIPER_LENGTH_RATE", (float)0.95),
+                _envConfigRaw.GetIntArray("CALIPER_THICKNESS_LIST", new[] { 3, 5, 7 }),
                 _envConfigRaw.GetInt("NUM_DISK", 25), _envConfigRaw.GetFloat("MAX_DISK_DISTANCE", 86), _envConfigRaw.GetFloat("MIN_DISK_DISTANCE", 24), _envConfigRaw.GetFloat("MIN_DISK_AREA", 150),
-                _envConfigRaw.GetIntArray("UV_DISK_LOWER_THRESHOLD"), _envConfigRaw.GetIntArray("UV_DISK_UPPER_THRESHOLD"), _envConfigRaw.GetFloat("UV_MIN_DISK_AREA", 20));
+                _envConfigRaw.GetIntArray("UV_DISK_LOWER_THRESHOLD", new[] { 107, 35, 40 }),
+                _envConfigRaw.GetIntArray("UV_DISK_UPPER_THRESHOLD", new[] { 119, 150, 250 }),
+                _envConfigRaw.GetFloat("UV_MIN_DISK_AREA", 20));
 
         }
         private void btnLoadFolder_MouseDown(object sender, MouseButtonEventArgs e)

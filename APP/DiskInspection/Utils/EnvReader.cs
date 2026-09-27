@@ -134,6 +134,16 @@ namespace DiskInspection.Utils
         {
             return GetIntArray(key, ',');
         }
+        public List<int> GetIntArray(string key, IEnumerable<int> defaultValues)
+        {
+            List<int> result = GetIntArray(key);
+            if (result.Count > 0)
+                return result;
+
+            return defaultValues == null
+                ? new List<int>()
+                : new List<int>(defaultValues);
+        }
         public float[] GetFloatArray(string key, char separator)
         {
             string[] parts = GetArray(key, separator);
