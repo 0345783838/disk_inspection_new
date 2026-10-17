@@ -10,6 +10,8 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Drawing" />
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="OpenTK">
@@ -18,6 +20,7 @@
     <Compile Include="FlowTests.cs" />
     <Compile Include="..\DiskInspection\Controllers\InspectionSequence.cs" />
     <Compile Include="..\DiskInspection\Controllers\InspectionImageWriter.cs" />
+    <Compile Include="..\DiskInspection\Controllers\Camera\CameraFrameNormalizer.cs" />
     <Compile Include="..\DiskInspection\Controllers\ImageSaver.cs" />
     <Compile Include="..\DiskInspection\Models\EnvironmentConfig.cs" />
     <Compile Include="..\DiskInspection\Utils\EnvReader.cs" />

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xác nhận mép đĩa HA</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#10151d;color:#e5ebf4;font:15px system-ui,sans-serif}
+header{display:flex;align-items:center;gap:18px;padding:16px 22px;border-bottom:1px solid #334155}
+header h1{font-size:20px;margin:0}button,select,textarea{font:inherit}button{border:1px solid #45566e;background:#243249;color:#edf4ff;border-radius:7px;padding:9px 13px;cursor:pointer}
+button:hover{background:#354965}button.selected{border-color:#68bdff;background:#164166}
+button:disabled{opacity:.45;cursor:default}.primary{background:#165fa2}.muted{color:#a5b2c5}.saved{color:#83d7ad}
+main{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:calc(100vh - 70px)}
+aside{padding:14px;border-right:1px solid #334155;max-height:calc(100vh - 70px);overflow:auto}aside button{display:block;width:100%;text-align:left;margin-bottom:7px;font-size:13px}
+section{padding:18px 22px;min-width:0}.title{display:flex;justify-content:space-between;align-items:center;gap:12px}.title h2{margin:0;font-size:19px}
+.toolbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:15px 0}
+.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.panel{min-width:0}.panel p{margin:0 0 8px;font-weight:600}
+.viewport{background:#090c11;overflow:auto;max-height:63vh;border:1px solid #38465a;border-radius:7px}
+canvas,.viewport img{display:block;max-width:none}canvas.drawing{cursor:crosshair}
+.legend{font-size:13px;line-height:1.6}.yellow{color:#ffd000}.cyan{color:#00f0ff}
+.choices{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.help{line-height:1.5;font-size:14px}
+textarea{width:100%;min-height:64px;border:1px solid #45566e;border-radius:7px;padding:9px;background:#182230;color:#e5ebf4;resize:vertical}
+.footer{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}
+details{margin-top:14px}details img{width:100%;margin-top:8px}code{overflow-wrap:anywhere}
+#message{margin:12px 0;min-height:22px;color:#a5dbff}label{display:flex;align-items:center;gap:7px}
+@media(max-width:800px){main{grid-template-columns:1fr}aside{max-height:130px;border-right:0;border-bottom:1px solid #334155}aside button{display:inline-block;width:100px;margin-right:6px}.panels{grid-template-columns:1fr}}
+</style>
+<header><h1>Xác nhận mép đĩa HA</h1><span id="progress" class="muted"></span><span id="saveState" class="saved">Đang tải…</span></header>
+<main>
+<aside><p class="muted">21 vùng cần xem</p><div id="list"></div></aside>
+<section>
+<div class="title"><h2 id="title"></h2><div><button id="prev">← Trước</button> <button id="next">Tiếp →</button></div></div>
+<p id="source" class="muted"></p>
+<p class="legend"><span class="yellow">Vàng: phần model bắt được.</span> <span class="cyan">Xanh cyan: phần được nối thêm, cần xác nhận.</span> Chỉ mask của mép đang xét được tô.</p>
+<div class="toolbar">
+<label>Phóng to <select id="zoom"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select></label>
+<label>Sáng hiển thị <input id="brightness" type="range" min="80" max="250" value="100"><span id="brightnessText">100%</span></label>
+<label><input id="draw" type="checkbox">Chỉ đường mép cần sửa</label>
+<button id="undo">Bỏ điểm cuối</button><button id="clear">Xóa đường chỉ</button>
+</div>
+<div class="panels">
+<div class="panel"><p>Ảnh gốc — có thể bấm điểm để chỉ đường đúng</p><div class="viewport"><canvas id="raw"></canvas></div></div>
+<div class="panel"><p>Mask đang đề xuất</p><div class="viewport"><img id="overlay" alt="Mask của mép cần xác nhận"></div></div>
+</div>
+<div class="choices">
+<button data-status="accept">1 · Đúng toàn mép</button>
+<button data-status="fix">2 · Có mép, cần sửa</button>
+<button data-status="reject">3 · Mask bắt nhầm</button>
+<button data-status="uncertain">4 · Chưa xác định</button>
+</div>
+<p class="help" id="help">Xem phần cyan có đi đúng mép thật không. Không cần ép mép chạm biên nếu ảnh không cho thấy nó tiếp tục.</p>
+<textarea id="notes" placeholder="Ghi chú nếu cần: phần dưới lệch sang phải; chỉ đúng đến giữa ảnh; mask quá rộng; còn một mép chưa gán…"></textarea>
+<div class="footer"><span class="muted">Chọn và ghi chú được lưu tự động. Mũi tên chuyển vùng; phím 1–4 chọn kết quả.</span><div><button id="export">Tải JSON dự phòng</button> <button id="finish" class="primary">Xong review</button></div></div>
+<div id="message"></div>
+<details><summary>Vị trí crop trong toàn band</summary><img id="context" alt="Vùng đang review trong toàn band"><p><code id="path"></code></p></details>
+</section>
+</main>
+<script>
+let payload, state, current=0, image=new Image(), imageToken=0, saveChain=Promise.resolve(), noteTimer;
+const $=id=>document.getElementById(id);
+const labels={accept:"Đúng",fix:"Cần sửa",reject:"Bắt nhầm",uncertain:"Chưa rõ"};
+const hints={
+accept:"Đã xác nhận cả phần vàng và cyan đi theo đúng mép đĩa.",
+fix:"Bật “Chỉ đường mép cần sửa”, rồi bấm khoảng 3–8 điểm dọc đường mép thật từ trên xuống dưới. Nếu chỉ cần rút ngắn mask, ghi rõ đoạn dừng trong ghi chú.",
+reject:"Chỉ chọn khi mép được tô là vật khác hoặc không phải mép đĩa. Nếu riêng phần nối sai, chọn “Có mép, cần sửa”.",
+uncertain:"Được phép chưa kết luận. Vùng này sẽ giữ trạng thái chưa xác nhận, không coi là nhãn chuẩn."
+};
+function item(){return payload.items[current]}
+function decision(){return state.decisions[item().id]||(state.decisions[item().id]={status:"",notes:"",points:[]})}
+function reviewed(){return payload.items.filter(v=>state.decisions[v.id]?.status).length}
+function updateList(){
+  $("progress").textContent=reviewed()+"/"+payload.items.length+" đã xem";
+  $("list").replaceChildren();
+  payload.items.forEach((v,i)=>{
+    const b=document.createElement("button");
+    b.textContent=v.id+" · "+(labels[state.decisions[v.id]?.status]||"Chưa xem");
+    if(i===current)b.classList.add("selected");
+    b.onclick=()=>navigate(i);$("list").append(b);
+  });
+}
+function renderCanvas(){
+  const canvas=$("raw"),ctx=canvas.getContext("2d");
+  if(!image.complete||!image.naturalWidth)return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0);
+  const points=decision().points||[];
+  ctx.strokeStyle="#ff49df";ctx.fillStyle="#ff49df";ctx.lineWidth=1.5;
+  ctx.beginPath();points.forEach((p,i)=>{const x=p.x-item().crop_x1;i?ctx.lineTo(x,p.y):ctx.moveTo(x,p.y)});ctx.stroke();
+  points.forEach(p=>{ctx.beginPath();ctx.arc(p.x-item().crop_x1,p.y,2.3,0,Math.PI*2);ctx.fill()});
+}
+function styleImages(){
+  const width=(item().crop_x2-item().crop_x1)*Number($("zoom").value);
+  $("raw").style.width=width+"px";$("overlay").style.width=width+"px";
+  const value=$("brightness").value;
+  $("raw").style.filter="brightness("+value+"%)";$("overlay").style.filter="brightness("+value+"%)";
+  $("brightnessText").textContent=value+"%";
+}
+function updateChoice(){
+  document.querySelectorAll("[data-status]").forEach(b=>b.classList.toggle("selected",b.dataset.status===decision().status));
+  $("help").textContent=hints[decision().status]||"Xem phần cyan có đi đúng mép thật không. Không cần ép mép chạm biên nếu ảnh không cho thấy nó tiếp tục.";
+  updateList();
+}
+function show(){
+  const v=item(),d=decision();
+  $("title").textContent=v.id+" · "+v.camera+" / "+v.band+" · x≈"+Math.round(v.x);
+  $("source").textContent=v.filename+" · phần nối thêm "+v.added_rows+" hàng pixel";
+  $("path").textContent=v.source;$("overlay").src=v.overlay;$("context").src=v.context;
+  $("notes").value=d.notes||"";$("draw").checked=false;$("raw").classList.remove("drawing");
+  $("raw").width=v.crop_x2-v.crop_x1;$("raw").height=v.height;
+  const token=++imageToken;image=new Image();image.onload=()=>{if(token===imageToken)renderCanvas()};image.src=v.raw;
+  $("prev").disabled=current===0;$("next").disabled=current===payload.items.length-1;
+  $("message").textContent="";styleImages();updateChoice();
+}
+function persist(){
+  const v=item(),d=decision(),body=JSON.stringify({id:v.id,status:d.status||"",notes:d.notes||"",points:d.points||[]});
+  $("saveState").textContent="Đang lưu…";
+  saveChain=saveChain.catch(()=>{}).then(async()=>{
+    const response=await fetch("/api/save",{method:"POST",headers:{"Content-Type":"application/json"},body});
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||"Lưu thất bại");
+    $("saveState").textContent="Đã lưu vào workspace";
+  }).catch(error=>{$("saveState").textContent="Lỗi lưu";$("message").textContent=error.message+" — dùng Tải JSON dự phòng.";throw error});
+}
+function flushNotes(){clearTimeout(noteTimer);decision().notes=$("notes").value;persist()}
+function navigate(index){flushNotes();current=Math.max(0,Math.min(payload.items.length-1,index));show()}
+function choose(status){decision().status=status;updateChoice();persist()}
+$("prev").onclick=()=>navigate(current-1);$("next").onclick=()=>navigate(current+1);
+document.querySelectorAll("[data-status]").forEach(b=>b.onclick=()=>choose(b.dataset.status));
+$("zoom").onchange=styleImages;$("brightness").oninput=styleImages;
+$("draw").onchange=()=>{$("raw").classList.toggle("drawing",$("draw").checked)};
+$("raw").onpointerdown=event=>{
+  if(!$("draw").checked)return;
+  const rect=$("raw").getBoundingClientRect(),v=item();
+  const x=Math.max(0,Math.min(v.crop_x2-v.crop_x1-1,(event.clientX-rect.left)*$("raw").width/rect.width));
+  const y=Math.max(0,Math.min(v.height-1,(event.clientY-rect.top)*$("raw").height/rect.height));
+  if(decision().points.length>=128)return;
+  decision().points.push({x:Number((x+v.crop_x1).toFixed(2)),y:Number(y.toFixed(2))});
+  decision().status="fix";renderCanvas();updateChoice();persist();
+};
+$("undo").onclick=()=>{decision().points.pop();renderCanvas();persist()};
+$("clear").onclick=()=>{decision().points=[];renderCanvas();persist()};
+$("notes").oninput=()=>{decision().notes=$("notes").value;clearTimeout(noteTimer);noteTimer=setTimeout(persist,450)};
+$("export").onclick=()=>{
+  flushNotes();const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ha_edge_review.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+$("finish").onclick=async()=>{
+  flushNotes();try{await saveChain}catch{return}
+  const n=reviewed();$("message").textContent=n===payload.items.length?
+    "Đã lưu đủ 21 vùng. Quay lại chat và nhắn “review xong”; tao sẽ đọc phản hồi và sửa nhãn.":
+    "Đã lưu "+n+"/"+payload.items.length+" vùng. Có thể dừng tại đây rồi quay lại tiếp; vùng chưa rõ nên chọn “Chưa xác định”.";
+};
+document.addEventListener("keydown",event=>{
+  if(["TEXTAREA","INPUT","SELECT"].includes(document.activeElement.tagName))return;
+  if(event.key==="ArrowRight")navigate(current+1);
+  if(event.key==="ArrowLeft")navigate(current-1);
+  const statuses={1:"accept",2:"fix",3:"reject",4:"uncertain"};
+  if(statuses[event.key])choose(statuses[event.key]);
+});
+(async()=>{
+  payload=await(await fetch("items.json")).json();state=await(await fetch("/api/state")).json();
+  $("saveState").textContent="Tiến độ được lưu tự động";show();
+})().catch(error=>{$("message").textContent=error.message;$("saveState").textContent="Không tải được dữ liệu"});
+</script>
+</html>

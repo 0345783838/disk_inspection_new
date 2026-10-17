@@ -347,7 +347,7 @@ class AdvancedMultiEdgeCaliper:
             int(round(cx + dx * half_len)),
             int(round(cy + dy * half_len))
         )
-        cv2.line(out, p1, p2, (0, 255, 0), 2)
+        cv2.line(out, p1, p2, (0, 255, 0), 1)
 
         # center mark
         cv2.circle(out, (int(cx), int(cy)), 2, (0, 255, 255), -1)

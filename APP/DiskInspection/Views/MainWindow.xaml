@@ -44,7 +44,13 @@
                             DockPanel.Dock="Top"
                             FontSize="13">
                             <MenuItem Header="_Menu" />
-                            <MenuItem Header="_Tools" />
+                            <MenuItem Header="_Tools">
+                                <MenuItem x:Name="miLocalWhite" Header="Test local RAW White (no camera / PLC)">
+                                    <MenuItem Header="Camera 1 - RAW White..." Tag="1" Click="LocalWhite_Click" />
+                                    <MenuItem Header="Camera 2 - RAW White..." Tag="2" Click="LocalWhite_Click" />
+                                </MenuItem>
+                            </MenuItem>
+                            <MenuItem x:Name="miLocalNotice" Header="LOCAL WHITE ONLY - UV / PLC NOT TESTED" Visibility="Collapsed" IsHitTestVisible="False" Foreground="DarkOrange" FontWeight="Bold" />
                             <MenuItem Header="_Help" />
                         </Menu>
                     </DockPanel>
@@ -275,7 +281,7 @@
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
-                                <Image x:Name="imbCam1WhiteOrigin" />
+                                <Image x:Name="imbCam1WhiteOrigin" Stretch="Uniform" />
                             </Border>
                             <Border
                                 Grid.Column="1"
@@ -331,7 +337,7 @@
                                     </Style>
                                 </Border.Style>
 
-                                <Image x:Name="imbCam1UvOrigin" />
+                                <Image x:Name="imbCam1UvOrigin" Stretch="Uniform" />
                             </Border>
                             <Border
                                 Grid.Column="1"
@@ -401,7 +407,7 @@
                                     </Style>
                                 </Border.Style>
 
-                                <Image x:Name="imbCam2WhiteOrigin" />
+                                <Image x:Name="imbCam2WhiteOrigin" Stretch="Uniform" />
                             </Border>
                             <Border
                                 Grid.Column="1"
@@ -457,7 +463,7 @@
                                     </Style>
                                 </Border.Style>
 
-                                <Image x:Name="imbCam2UvOrigin" />
+                                <Image x:Name="imbCam2UvOrigin" Stretch="Uniform" />
                             </Border>
                             <Border
                                 Grid.Column="1"

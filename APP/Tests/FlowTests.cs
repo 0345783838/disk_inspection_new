@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DiskInspection.Controllers;
+using DiskInspection.Controllers.Camera;
 using DiskInspection.Models;
 using DiskInspection.Utils;
 
@@ -42,6 +43,7 @@ internal static class FlowTests
         await Check("queued images stay with their cycle", ImageSnapshots);
         await Check("image extension matches encoded bytes", ImageFormat);
         await Check("missing array settings use safe defaults", ConfigArrayDefaults);
+        await Check("camera normalization preserves orientation, ROI and White/UV mapping", CameraNormalization);
     }
     private static async Task Check(string name, Func<Task> test)
     {
@@ -175,6 +177,54 @@ internal static class FlowTests
             "Environment config retained an empty caliper thickness list.");
         Assert(config.UvLowerThreshold.Count == 3 && config.UvUpperThreshold.Count == 3,
             "Environment config retained invalid UV threshold arrays.");
+        return Task.CompletedTask;
+    }
+
+    private static Task CameraNormalization()
+    {
+        using (var source = new System.Drawing.Bitmap(3, 2))
+        {
+            source.SetPixel(0, 0, System.Drawing.Color.Red);
+            source.SetPixel(2, 0, System.Drawing.Color.Green);
+            source.SetPixel(0, 1, System.Drawing.Color.Blue);
+            source.SetPixel(2, 1, System.Drawing.Color.Yellow);
+
+            var normalizer = new CameraFrameNormalizer(
+                new CameraFrameNormalizationOptions(CameraFrameRotation.Clockwise90),
+                new CameraFrameNormalizationOptions(CameraFrameRotation.CounterClockwise90));
+            using (var cam1White = normalizer.Normalize(source, 1))
+            using (var cam1Uv = normalizer.Normalize(source, 1))
+            using (var cam2 = normalizer.Normalize(source, 2))
+            using (var cam2Uv = normalizer.Normalize(source, 2))
+            {
+                Assert(cam1White.Size == new System.Drawing.Size(2, 3), "Cam1 rotation has the wrong shape.");
+                Assert(cam2.Size == new System.Drawing.Size(2, 3), "Cam2 rotation has the wrong shape.");
+                Assert(cam1White.GetPixel(1, 0).ToArgb() == System.Drawing.Color.Red.ToArgb(),
+                    "Cam1 did not rotate clockwise.");
+                Assert(cam2.GetPixel(0, 2).ToArgb() == System.Drawing.Color.Red.ToArgb(),
+                    "Cam2 did not rotate counter-clockwise.");
+                Assert(cam1White.Size == cam1Uv.Size &&
+                    cam1White.GetPixel(0, 0).ToArgb() == cam1Uv.GetPixel(0, 0).ToArgb(),
+                    "White and UV do not share the same camera transform.");
+                Assert(cam2.Size == cam2Uv.Size &&
+                    cam2.GetPixel(0, 2).ToArgb() == cam2Uv.GetPixel(0, 2).ToArgb(),
+                    "Cam2 White/UV Origin must share the same rotated frame.");
+                Assert(source.Size == new System.Drawing.Size(3, 2) &&
+                    source.GetPixel(0, 0).ToArgb() == System.Drawing.Color.Red.ToArgb(),
+                    "Origin rotation mutated the original RAW capture.");
+            }
+
+            var croppedNormalizer = new CameraFrameNormalizer(
+                new CameraFrameNormalizationOptions(CameraFrameRotation.Clockwise90, "0,1,2,2"),
+                new CameraFrameNormalizationOptions(CameraFrameRotation.None));
+            using (var full = normalizer.Normalize(source, 1))
+            using (var cropped = croppedNormalizer.Normalize(source, 1))
+            {
+                Assert(cropped.Size == new System.Drawing.Size(2, 2), "Configured ROI was not applied.");
+                Assert(cropped.GetPixel(0, 0).ToArgb() == full.GetPixel(0, 1).ToArgb(),
+                    "ROI coordinates were not evaluated after rotation.");
+            }
+        }
         return Task.CompletedTask;
     }
 }

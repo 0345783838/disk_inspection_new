@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from src.dtos.meta import DataResponse, UvParams
 from src.tools.caliper_advanced_new import AdvancedMultiEdgeCaliper
+from src.tools.normalize_factory_frames import normalize_frame
 
 # Isolate hardware/model construction, while exercising the actual service and route code.
 base = types.ModuleType("src.service.base_service")
@@ -69,6 +70,19 @@ class CaliperTests(unittest.TestCase):
                          [p["distance"] for p in debug["pairs"]])
 
 
+class NormalizationToolTests(unittest.TestCase):
+    def test_batch_normalizer_matches_camera_rotation_and_post_rotation_roi(self):
+        image = np.zeros((2, 3, 3), dtype=np.uint8)
+        image[0, 0] = (0, 0, 255)
+        cam1 = normalize_frame(image, 1)
+        cam2 = normalize_frame(image, 2)
+        self.assertEqual(cam1.shape[:2], (3, 2))
+        self.assertTrue(np.array_equal(cam1[0, 1], image[0, 0]))
+        self.assertTrue(np.array_equal(cam2[2, 0], image[0, 0]))
+        self.assertTrue(np.array_equal(
+            normalize_frame(image, 1, (0, 1, 2, 2)), cam1[1:3, 0:2]))
+
+
 class PipelineTests(unittest.TestCase):
     def setUp(self):
         self.service = DiskCheckingService()
@@ -113,6 +127,22 @@ class PipelineTests(unittest.TestCase):
                 for field in ['CropBox', 'UvBox1', 'UvBox2', 'Mid1', 'Mid2']:
                     self.assertEqual(getattr(prod, field), getattr(debug, field))
 
+    def test_white_uv_bands_follow_both_faces_of_middle_support(self):
+        result = self.service.check_disk_white(self.image.copy())
+        _, matrix, (width, _), _ = self.service.full_rectify_pipeline(
+            self.image, self.rows[0], self.rows[2], expand_ratio_x=.2, expand_ratio_y=.1)
+        middle = np.median(self.service.update_boxes_after_warp(self.rows[1], matrix), axis=0)
+        for index, direction in ((1, 'top'), (2, 'bottom')):
+            actual = np.array(ast.literal_eval(getattr(result, f'UvBox{index}')))
+            expected = self.service.get_uv_box(middle, width, start_ratio=0,
+                                               ratio_height=2, direction=direction)
+            np.testing.assert_allclose(actual, expected, atol=1e-4)
+        band1 = np.array(ast.literal_eval(result.UvBox1))
+        band2 = np.array(ast.literal_eval(result.UvBox2))
+        self.assertAlmostEqual(band1[2, 1], middle[1], places=4)
+        self.assertAlmostEqual(band2[0, 1], middle[3], places=4)
+        self.assertLess(band1[2, 1], band2[0, 1])
+
     def test_white_classifies_all_four_faces_around_three_point_rows(self):
         self.classify_batch_calls = 0
         result = self.service.check_disk_white(self.image.copy())
@@ -127,12 +157,47 @@ class PipelineTests(unittest.TestCase):
             np.array(ast.literal_eval(result.Mid2), dtype=np.float32),
         )
 
+    def test_wider_classifier_crop_changes_only_x_extent(self):
+        point = np.array([[100,60,160,160]],dtype=np.float32)
+        for direction in ('top','bottom'):
+            before = self.service.get_line_boxes_ratio_shift(self.image,point,direction)[0]
+            self.service.classify_crop_width_ratio = 1.8
+            after = self.service.get_line_boxes_ratio_shift(self.image,point,direction)[0]
+            explicit = self.service.get_line_boxes_ratio_shift(self.image,point,direction,ratio_width=1.5)[0]
+            self.assertEqual(explicit,[85,before[1],175,before[3]])
+            self.assertEqual(after,[76,before[1],184,before[3]])
+            self.assertEqual(after[1::2],before[1::2])
+            del self.service.classify_crop_width_ratio
+
+    def test_invalid_classifier_crop_ratio_is_rejected(self):
+        for value in (0,-1,float('nan'),float('inf')):
+            self.service.classify_crop_width_ratio = value
+            with self.assertRaises(ValueError):
+                self.service.get_line_boxes_ratio_shift(self.image,self.rows[0],'bottom')
+
+    def test_wide_crop_keeps_production_debug_parity(self):
+        self.service.classify_crop_width_ratio = 1.8
+        prod = self.service.check_disk_white(self.image.copy())
+        debug = self.service.check_disk_debug(self.image.copy(),self.service._default_white_params())
+        self.assertEqual(prod.Result,debug.Result)
+        self.assertEqual(prod.ResImg,debug.FinalImg)
+
     def test_rejects_when_one_point_row_is_short_even_if_total_count_is_enough(self):
         self.boxes = np.vstack((self.rows[0], self.rows[0][:1], self.rows[1][:-1], self.rows[2]))
         result = self.service.check_disk_white(self.image.copy())
         self.assertEqual(result.Result, 1)
         self.assertEqual(result.ErrorCode, 'ERROR_002')
         self.assertIsNone(result.CropBox)
+
+    def test_small_overlap_cluster_is_not_folded_into_the_third_row(self):
+        overlap = np.array(
+            [[40 + i * 28, 205, 50 + i * 28, 215] for i in range(6)], dtype=np.float32)
+        self.boxes = np.vstack((*self.rows, overlap))
+        selected = self.service.split_rows(
+            self.boxes, expected_rows=3, expected_points_per_row=25)
+        self.assertEqual([len(row) for row in selected], [25, 25, 25])
+        self.assertLess(np.max(selected[2][:, 3]), np.min(overlap[:, 1]))
+        self.assertEqual(self.service.check_disk_white(self.image.copy()).Result, 0)
 
     def test_no_detections_rejects_without_uv_geometry(self):
         self.boxes = np.empty((0, 4), dtype=np.float32)
@@ -144,6 +209,26 @@ class PipelineTests(unittest.TestCase):
         self.assertIsNone(prod.CropBox)
         self.assertEqual(prod.MinDiskDistance, 0)
         self.assertTrue(prod.ResImg and debug.FinalImg)
+
+    def test_slot_recovery_does_not_turn_missing_disks_into_ok(self):
+        self.service.point_slot_completion = True
+        self.service.point_slot_count = 25
+        self.boxes = np.vstack((np.delete(self.rows[0],[0,12,24],axis=0),self.rows[1],self.rows[2]))
+        self.label = 'no_disk'
+        result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual(result.Result,2)
+        self.assertEqual(result.PointGeometryStatus,'completed')
+        self.assertEqual([m['slot'] for m in result.InferredSlots],[1,13,25])
+        self.assertEqual(self.classify_batch_calls,4)
+
+    def test_slot_recovery_rejects_insufficient_geometry(self):
+        self.service.point_slot_completion = True
+        self.service.point_slot_count = 25
+        self.boxes = np.vstack((self.rows[0][1:],self.rows[1][1:],self.rows[2]))
+        result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual(result.ErrorCode,'ERROR_002')
+        self.assertEqual(self.classify_batch_calls,0)
+        self.assertTrue(result.PointGeometryStatus.startswith('rejected:'))
 
     def test_debug_uses_requested_disk_count(self):
         params = self.service._default_white_params()

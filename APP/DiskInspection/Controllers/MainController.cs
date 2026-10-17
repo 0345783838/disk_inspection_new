@@ -34,6 +34,7 @@ namespace DiskInspection.Controllers
         private CameraManager _cameraManager;
         private LincolnCamera _camera1;
         private LincolnCamera _camera2;
+        private readonly CameraFrameNormalizer _frameNormalizer;
 
         // ─── Timers ───────────────────────────────────────────────────────────────
         private System.Timers.Timer _statusTimer;
@@ -45,6 +46,7 @@ namespace DiskInspection.Controllers
         private Task _stopTask = Task.CompletedTask;
         private Task _startup = Task.CompletedTask;
         private bool _stopRequested;
+        private bool _hardwareMayBeActive;
         private readonly InspectionImageWriter _imageWriter = new InspectionImageWriter();
         private CancellationTokenSource _inspectCts;
         public bool ServiceIsRunning { get; private set; }
@@ -54,10 +56,10 @@ namespace DiskInspection.Controllers
         private readonly object _cam1Lock = new object();
         private readonly object _cam2Lock = new object();
 
-        private BitmapSource _cam1WhiteOrigin, _cam1WhiteResult;
-        private BitmapSource _cam1UvOrigin, _cam1UvResult;
-        private BitmapSource _cam2WhiteOrigin, _cam2WhiteResult;
-        private BitmapSource _cam2UvOrigin, _cam2UvResult;
+        private BitmapSource _cam1WhiteRaw, _cam1WhiteOrigin, _cam1WhiteResult;
+        private BitmapSource _cam1UvRaw, _cam1UvOrigin, _cam1UvResult;
+        private BitmapSource _cam2WhiteRaw, _cam2WhiteOrigin, _cam2WhiteResult;
+        private BitmapSource _cam2UvRaw, _cam2UvOrigin, _cam2UvResult;
 
         // ─── Constants ───────────────────────────────────────────────────────────
         private const int PlcPollIntervalMs = 50;
@@ -69,8 +71,11 @@ namespace DiskInspection.Controllers
         public MainController(MainWindow window)
         {
             _mainWindow = window;
-
+            _frameNormalizer = CameraFrameNormalizer.FromAppSettings();
         }
+
+        // The legacy settings/debug windows can also connect/control hardware.
+        internal void MarkHardwareMayBeActive() { _hardwareMayBeActive = true; }
 
         // ═════════════════════════════════════════════════════════════════════════
         // 1. KHỞI ĐỘNG CHƯƠNG TRÌNH
@@ -128,6 +133,7 @@ namespace DiskInspection.Controllers
             try
             {
                 // PLC communication is hosted by the AI service and must be connected after it starts.
+                _hardwareMayBeActive = true;
                 if (!CheckAndStartAI() || !CheckAndStartPLC() || !CheckAndStartCamera())
                 {
                     ShutdownAllLights();
@@ -277,6 +283,7 @@ namespace DiskInspection.Controllers
             App.ImageViewer.ClearImages();
             App.ImageViewer.HideViewer();
             ClearCycleImages();
+            Bitmap whiteRaw1 = null, whiteRaw2 = null, uvRaw1 = null, uvRaw2 = null;
             Bitmap white1 = null, white2 = null, uv1 = null, uv2 = null;
             InspectionResponse whiteResult1 = null, whiteResult2 = null;
             CameraInspectionResult cam1Result = null, cam2Result = null;
@@ -287,10 +294,12 @@ namespace DiskInspection.Controllers
                 await sequence.RunAsync(
                     async ct =>
                     {
-                        (white1, white2) = await CaptureFromBothCamerasAsync(ct).ConfigureAwait(false);
-                        if (white1 == null || white2 == null)
+                        (whiteRaw1, whiteRaw2) = await CaptureFromBothCamerasAsync(ct).ConfigureAwait(false);
+                        if (whiteRaw1 == null || whiteRaw2 == null)
                             throw new InvalidOperationException("Camera did not return both White frames.");
-                        UpdateCapturedFrameUI(white1, white2, InspectionLight.White);
+                        white1 = _frameNormalizer.Normalize(whiteRaw1, 1);
+                        white2 = _frameNormalizer.Normalize(whiteRaw2, 2);
+                        UpdateCapturedFrameUI(whiteRaw1, whiteRaw2, white1, white2, InspectionLight.White);
                     },
                     async ct =>
                     {
@@ -300,10 +309,14 @@ namespace DiskInspection.Controllers
                     },
                     async ct =>
                     {
-                        (uv1, uv2) = await CaptureFromBothCamerasAsync(ct).ConfigureAwait(false);
-                        if (uv1 == null || uv2 == null)
+                        (uvRaw1, uvRaw2) = await CaptureFromBothCamerasAsync(ct).ConfigureAwait(false);
+                        if (uvRaw1 == null || uvRaw2 == null)
                             throw new InvalidOperationException("Camera did not return both UV frames.");
-                        UpdateCapturedFrameUI(uv1, uv2, InspectionLight.Uv);
+                        uv1 = _frameNormalizer.Normalize(uvRaw1, 1);
+                        uv2 = _frameNormalizer.Normalize(uvRaw2, 2);
+                        ValidateWhiteUvMapping(white1, uv1, 1);
+                        ValidateWhiteUvMapping(white2, uv2, 2);
+                        UpdateCapturedFrameUI(uvRaw1, uvRaw2, uv1, uv2, InspectionLight.Uv);
                     },
                     async ct =>
                     {
@@ -340,11 +353,22 @@ namespace DiskInspection.Controllers
             }
             finally
             {
+                whiteRaw1?.Dispose();
+                whiteRaw2?.Dispose();
+                uvRaw1?.Dispose();
+                uvRaw2?.Dispose();
                 white1?.Dispose();
                 white2?.Dispose();
                 uv1?.Dispose();
                 uv2?.Dispose();
             }
+        }
+
+        private static void ValidateWhiteUvMapping(Bitmap white, Bitmap uv, int cameraId)
+        {
+            if (white == null || uv == null || white.Size != uv.Size)
+                throw new InvalidOperationException(
+                    $"Camera {cameraId} White/UV normalized frames do not share the same dimensions.");
         }
 
         private async Task<(Bitmap cam1, Bitmap cam2)> CaptureFromBothCamerasAsync(CancellationToken token)
@@ -410,20 +434,94 @@ namespace DiskInspection.Controllers
         private async Task<(InspectionResponse cam1, InspectionResponse cam2)> RunWhiteAIAsync(
             Bitmap frame1, Bitmap frame2, CancellationToken token)
         {
-            var results = await Task.WhenAll(Inspect(frame1), Inspect(frame2)).ConfigureAwait(false);
+            var results = await Task.WhenAll(InspectWhiteFrameAsync(frame1, token),
+                InspectWhiteFrameAsync(frame2, token)).ConfigureAwait(false);
             return (results[0], results[1]);
+        }
 
-            async Task<InspectionResponse> Inspect(Bitmap frame)
+        private async Task<InspectionResponse> InspectWhiteFrameAsync(Bitmap frame, CancellationToken token)
+        {
+            using (var image = new Image<Bgr, byte>(frame))
             {
-                using (var image = new Image<Bgr, byte>(frame))
+                var result = await APICommunication.InspectWhiteLightAsync(_param.ApiUrlAi, image.Mat, token).ConfigureAwait(false);
+                if (result == null || result.Result < 0 || result.Result > 2 || string.IsNullOrWhiteSpace(result.ResImg))
+                    throw new InvalidOperationException("Invalid White inspection response.");
+                if (!result.HasUvGeometry && result.Result != (int)InspectionResult.Failed)
+                    throw new InvalidOperationException("White inspection returned no UV geometry.");
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Local RAW White frame -> the SAME normalization/API/UI as production.
+        /// No camera, lights, PLC trigger/result, UV, counters or production image saving.
+        /// Instead of commenting TriggerAndGetFrame, use Tools > Test local RAW White.
+        /// </summary>
+        public Task InspectLocalWhiteAsync(string path, int cameraId)
+        {
+            if (cameraId != 1 && cameraId != 2) throw new ArgumentOutOfRangeException(nameof(cameraId));
+            if (!File.Exists(path)) throw new FileNotFoundException("Local image not found.", path);
+            lock (_stateGate)
+            {
+                if (_isRunning || !_inspectionLoop.IsCompleted || !_stopTask.IsCompleted || !_startup.IsCompleted)
+                    throw new InvalidOperationException("Stop inspection before testing a local image.");
+                _inspectCts?.Dispose();
+                _inspectCts = new CancellationTokenSource();
+                var token = _inspectCts.Token;
+                // Stop/Shutdown joins this completion even if the API fails; the caller still receives the error.
+                var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _inspectionLoop = completion.Task;
+                return Task.Run(async () =>
                 {
-                    var result = await APICommunication.InspectWhiteLightAsync(_param.ApiUrlAi, image.Mat, token).ConfigureAwait(false);
-                    if (result == null || result.Result < 0 || result.Result > 2 || string.IsNullOrWhiteSpace(result.ResImg))
-                        throw new InvalidOperationException("Invalid White inspection response.");
-                    if (!result.HasUvGeometry && result.Result != (int)InspectionResult.Failed)
-                        throw new InvalidOperationException("White inspection returned no UV geometry.");
-                    return result;
+                    try { await RunLocalWhiteAsync(path, cameraId, token).ConfigureAwait(false); }
+                    finally { completion.TrySetResult(true); }
+                });
+            }
+        }
+
+        private async Task RunLocalWhiteAsync(string path, int cameraId, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            App.ImageViewer.ClearImages();
+            App.ImageViewer.HideViewer();
+            ClearCycleImages(updateUi: false);
+            _mainWindow.PrepareLocalWhiteUI(cameraId);
+            var elapsed = Stopwatch.StartNew();
+            // This is the local-image replacement for camera.TriggerAndGetFrame().
+            using (var raw = new Bitmap(path))
+            using (var normalized = _frameNormalizer.Normalize(raw, cameraId))
+            {
+                var rawSource = Converter.BitmapToBitmapSource(raw);
+                var normalizedSource = Converter.BitmapToBitmapSource(normalized);
+                // Origin always uses the already rotated canonical frame. Keep
+                // RAW only in the capture snapshot/save path, not as an Origin.
+                App.ImageViewer.AddImage(normalizedSource, cameraId + "-White-Origin", ThumbStatus.Origin, "LOCAL White - Origin (rotated)");
+                if (cameraId == 1)
+                {
+                    lock (_cam1Lock) { _cam1WhiteRaw = rawSource; _cam1WhiteOrigin = normalizedSource; }
+                    _mainWindow.UpdateCam1WhiteOrigin(normalizedSource);
                 }
+                else
+                {
+                    lock (_cam2Lock) { _cam2WhiteRaw = rawSource; _cam2WhiteOrigin = normalizedSource; }
+                    _mainWindow.UpdateCam2WhiteOrigin(normalizedSource);
+                }
+                var result = await InspectWhiteFrameAsync(normalized, token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                UpdateUIWithWhiteResults(cameraId == 1 ? result : null, cameraId == 2 ? result : null);
+                elapsed.Stop();
+                // Per-camera status is WHITE ONLY; aggregate result remains UNKNOWN (UV not tested).
+                if (cameraId == 1)
+                {
+                    _mainWindow.UpdateInspectionStatusCam1((InspectionResult)result.Result);
+                    _mainWindow.UpdateCam1ProcessedTime(elapsed.Elapsed);
+                }
+                else
+                {
+                    _mainWindow.UpdateInspectionStatusCam2((InspectionResult)result.Result);
+                    _mainWindow.UpdateCam2ProcessedTime(elapsed.Elapsed);
+                }
+                AppLogger.Instance.Info($"LOCAL White CAM{cameraId}: {path}; {result.ErrorDesc}; {elapsed.ElapsedMilliseconds} ms. UV/PLC NOT tested.", "DEBUG");
             }
         }
 
@@ -496,35 +594,35 @@ namespace DiskInspection.Controllers
         // ═════════════════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Cập nhật UI ảnh gốc ngay sau khi chụp.
+        /// Origin trên main UI/gallery dùng canonical frame đã xoay đúng một lần.
+        /// Raw frame chỉ giữ để lưu và truy vết, không thêm làm ảnh Origin.
         /// </summary>
-        private void UpdateCapturedFrameUI(Bitmap frame1, Bitmap frame2, InspectionLight light)
+        private void UpdateCapturedFrameUI(
+            Bitmap raw1, Bitmap raw2, Bitmap normalized1, Bitmap normalized2, InspectionLight light)
         {
-            if (frame1 == null)
+            if (raw1 == null || normalized1 == null)
             {
                 ShowAndLogError("Captured frame 1 null", "CAM1");
                 return;
             }
-            if (frame2 == null)
+            if (raw2 == null || normalized2 == null)
             {
                 ShowAndLogError("Captured frame 2 null", "CAM2");
                 return;
             }
             if (light == InspectionLight.White)
-            {  
+            {
                 lock (_cam1Lock)
                 {
-                   
-                        
-                    _cam1WhiteOrigin = Converter.BitmapToBitmapSource(frame1);
-                    App.ImageViewer.AddImage(_cam1WhiteOrigin, "1-White-Origin", ThumbStatus.Origin, "Camera 1 - White - Original");
+                    _cam1WhiteRaw = Converter.BitmapToBitmapSource(raw1);
+                    _cam1WhiteOrigin = Converter.BitmapToBitmapSource(normalized1);
+                    App.ImageViewer.AddImage(_cam1WhiteOrigin, "1-White-Origin", ThumbStatus.Origin, "Camera 1 - White - Origin (rotated)");
                 }
                 lock (_cam2Lock)
                 {
-                    
-                        
-                    _cam2WhiteOrigin = Converter.BitmapToBitmapSource(frame2);
-                    App.ImageViewer.AddImage(_cam2WhiteOrigin, "2-White-Origin", ThumbStatus.Origin, "Camera 2 - White - Original");
+                    _cam2WhiteRaw = Converter.BitmapToBitmapSource(raw2);
+                    _cam2WhiteOrigin = Converter.BitmapToBitmapSource(normalized2);
+                    App.ImageViewer.AddImage(_cam2WhiteOrigin, "2-White-Origin", ThumbStatus.Origin, "Camera 2 - White - Origin (rotated)");
                 }
                 _mainWindow.UpdateCam1WhiteOrigin(_cam1WhiteOrigin);
                 _mainWindow.UpdateCam2WhiteOrigin(_cam2WhiteOrigin);
@@ -533,13 +631,15 @@ namespace DiskInspection.Controllers
             {
                 lock (_cam1Lock)
                 {
-                    _cam1UvOrigin = Converter.BitmapToBitmapSource(frame1);
-                    App.ImageViewer.AddImage(_cam1UvOrigin, "1-UV-Origin", ThumbStatus.Origin, "Camera 1 - UV - Original");
+                    _cam1UvRaw = Converter.BitmapToBitmapSource(raw1);
+                    _cam1UvOrigin = Converter.BitmapToBitmapSource(normalized1);
+                    App.ImageViewer.AddImage(_cam1UvOrigin, "1-UV-Origin", ThumbStatus.Origin, "Camera 1 - UV - Origin (rotated)");
                 }
                 lock (_cam2Lock)
                 {
-                    _cam2UvOrigin = Converter.BitmapToBitmapSource(frame2);
-                    App.ImageViewer.AddImage(_cam2UvOrigin, "2-UV-Origin", ThumbStatus.Origin, "Camera 2 - UV - Original");
+                    _cam2UvRaw = Converter.BitmapToBitmapSource(raw2);
+                    _cam2UvOrigin = Converter.BitmapToBitmapSource(normalized2);
+                    App.ImageViewer.AddImage(_cam2UvOrigin, "2-UV-Origin", ThumbStatus.Origin, "Camera 2 - UV - Origin (rotated)");
                 }
                 _mainWindow.UpdateCam1UvOrigin(_cam1UvOrigin);
                 _mainWindow.UpdateCam2UvOrigin(_cam2UvOrigin);
@@ -636,14 +736,17 @@ namespace DiskInspection.Controllers
         /// <summary>
         /// Lưu ảnh theo SaveMode. Chạy trong background thread, không block UI.
         /// </summary>
-        private void ClearCycleImages()
+        private void ClearCycleImages(bool updateUi = true)
         {
             lock (_cam1Lock)
             lock (_cam2Lock)
             {
+                _cam1WhiteRaw = _cam1UvRaw = null;
                 _cam1WhiteOrigin = _cam1WhiteResult = _cam1UvOrigin = _cam1UvResult = null;
+                _cam2WhiteRaw = _cam2UvRaw = null;
                 _cam2WhiteOrigin = _cam2WhiteResult = _cam2UvOrigin = _cam2UvResult = null;
             }
+            if (!updateUi) return;
             _mainWindow.UpdateCam1WhiteResult(null);
             _mainWindow.UpdateCam2WhiteResult(null);
             _mainWindow.UpdateCam1UvResult(null);
@@ -665,8 +768,10 @@ namespace DiskInspection.Controllers
             {
                 if (mode != SaveType.RESULT)
                 {
-                    Add("Cam1_White_Original", _cam1WhiteOrigin); Add("Cam2_White_Original", _cam2WhiteOrigin);
-                    Add("Cam1_UV_Original", _cam1UvOrigin); Add("Cam2_UV_Original", _cam2UvOrigin);
+                    Add("Cam1_White_Raw", _cam1WhiteRaw); Add("Cam2_White_Raw", _cam2WhiteRaw);
+                    Add("Cam1_White_Normalized", _cam1WhiteOrigin); Add("Cam2_White_Normalized", _cam2WhiteOrigin);
+                    Add("Cam1_UV_Raw", _cam1UvRaw); Add("Cam2_UV_Raw", _cam2UvRaw);
+                    Add("Cam1_UV_Normalized", _cam1UvOrigin); Add("Cam2_UV_Normalized", _cam2UvOrigin);
                 }
                 if (mode != SaveType.ORIGINAL)
                 {
@@ -745,7 +850,9 @@ namespace DiskInspection.Controllers
         {
             await startup.ConfigureAwait(false);
             await loop.ConfigureAwait(false);
-            await Task.Run(() => ShutdownAllLights()).ConfigureAwait(false);
+            // A local-only session has never connected hardware; do not contact PLC on close.
+            if (_hardwareMayBeActive)
+                await Task.Run(() => ShutdownAllLights()).ConfigureAwait(false);
             StopAllCameras();
             await _imageWriter.FlushAsync().ConfigureAwait(false);
         }

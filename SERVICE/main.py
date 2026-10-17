@@ -10,6 +10,7 @@ log_config["formatters"]["access"]["fmt"] = "%(asctime)s - %(levelname)s - %(mes
 log_config["formatters"]["default"]["fmt"] = "%(asctime)s - %(levelname)s - %(message)s"
 
 from src.app import app
-uvicorn.run(app, host="0.0.0.0", port=8386, log_config=log_config)
+# Keep the production default; isolated smoke tests may choose a free port.
+uvicorn.run(app, host="0.0.0.0", port=decouple.config('DISK_API_PORT', default=8386, cast=int), log_config=log_config)
 
 

@@ -195,6 +195,7 @@
     <Compile Include="Controllers\APIs\APICommunication.cs" />
     <Compile Include="Controllers\AppLogger.cs" />
     <Compile Include="Controllers\Camera\LincolnCamera.cs" />
+    <Compile Include="Controllers\Camera\CameraFrameNormalizer.cs" />
     <Compile Include="Controllers\ImageCleanupService.cs" />
     <Compile Include="Controllers\ImageSaver.cs" />
     <Compile Include="Controllers\MainController.cs" />

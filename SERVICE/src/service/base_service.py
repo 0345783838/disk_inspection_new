@@ -29,6 +29,10 @@ DISK_SEGMENT_CONF_THRESH = config('DISK_SEGMENT_CONF_THRESH', cast=float)
 DISK_SEGMENT_IOU_THRESH = config('DISK_SEGMENT_IOU_THRESH', cast=float)
 DISK_SEGMENT_USING_GPU = config('DISK_SEGMENT_USING_GPU', cast=int)
 DISK_SEGMENT_NUM_THREADS = config('DISK_SEGMENT_NUM_THREADS', cast=int)
+DISK_SEGMENT_PREPROCESS_MODE = config('DISK_SEGMENT_PREPROCESS_MODE', default='stretch')
+DISK_SEGMENT_RGB_INPUT = config('DISK_SEGMENT_RGB_INPUT', cast=bool, default=False)
+DISK_SEGMENT_MASK_DECODE = config('DISK_SEGMENT_MASK_DECODE', default='legacy')
+DISK_SEGMENT_TILE_MERGE = config('DISK_SEGMENT_TILE_MERGE', default='max')
 
 # Detection model
 DISK_POINT_DETECT_MODEL_PATH = config('DISK_POINT_DETECT_MODEL_PATH')
@@ -36,6 +40,12 @@ DISK_POINT_DETECT_MODEL_LABELS = config('DISK_POINT_DETECT_MODEL_LABELS',
                                         cast=lambda v: [s.strip() for s in v.split(',')])
 DISK_POINT_DETECT_CONF_THRESH = config('DISK_POINT_DETECT_CONF_THRESH', cast=float)
 DISK_POINT_DETECT_IOU_THRESH = config('DISK_POINT_DETECT_IOU_THRESH', cast=float)
+DISK_POINT_DETECT_INPUT_ROI = config('DISK_POINT_DETECT_INPUT_ROI', default='',
+                                    cast=lambda v: tuple(int(x.strip()) for x in v.split(',')) if v.strip() else None)
+DISK_POINT_DETECT_CANONICAL_SIZE = config('DISK_POINT_DETECT_CANONICAL_SIZE', default='',
+                                         cast=lambda v: tuple(int(x.strip()) for x in v.split(',')) if v.strip() else None)
+DISK_POINT_SLOT_COUNT = config('DISK_POINT_SLOT_COUNT', default=25, cast=int)
+DISK_POINT_SLOT_COMPLETION = config('DISK_POINT_SLOT_COMPLETION', default=False, cast=bool)
 
 # Classification model
 POINT_CLASSIFY_MODEL_PATH = config('POINT_CLASSIFY_MODEL_PATH')
@@ -43,6 +53,9 @@ POINT_CLASSIFY_LABELS = config('POINT_CLASSIFY_LABELS', cast=lambda v: [s.strip(
 POINT_CLASSIFY_CONF_THRESH = config('POINT_CLASSIFY_CONF_THRESH', cast=float)
 POINT_CLASSIFY_IMAGE_SIZE = config('POINT_CLASSIFY_IMAGE_SIZE', cast=Csv(cast=int))
 POINT_CLASSIFY_BATCH_SIZE = config('POINT_CLASSIFY_BATCH_SIZE', cast=int, default=1)
+POINT_CLASSIFY_CROP_WIDTH_RATIO = config('POINT_CLASSIFY_CROP_WIDTH_RATIO', cast=float, default=1.5)
+if not 0 < POINT_CLASSIFY_CROP_WIDTH_RATIO < 10:
+    raise ValueError('POINT_CLASSIFY_CROP_WIDTH_RATIO must be finite and positive, below 10')
 
 CALIPER_MIN_EDGE_DISTANCE = config('CALIPER_MIN_EDGE_DISTANCE', cast=float)
 CALIPER_SUBPIXEL = config('CALIPER_SUB_PIXEL', cast=bool)
@@ -73,7 +86,9 @@ UV_MIN_DISK_AREA = config('UV_MIN_DISK_AREA', cast=float)
 disk_point_detect_model = OnnxDetector(path=DISK_POINT_DETECT_MODEL_PATH,
                                        label=DISK_POINT_DETECT_MODEL_LABELS,
                                        conf_thres=DISK_POINT_DETECT_CONF_THRESH,
-                                       iou_thres=DISK_POINT_DETECT_IOU_THRESH)
+                                       iou_thres=DISK_POINT_DETECT_IOU_THRESH,
+                                       input_roi=DISK_POINT_DETECT_INPUT_ROI,
+                                       canonical_size=DISK_POINT_DETECT_CANONICAL_SIZE)
 
 point_classification_model = YoloClassifier(model_path=POINT_CLASSIFY_MODEL_PATH,
                                             labels=POINT_CLASSIFY_LABELS,
@@ -94,7 +109,11 @@ caliper = AdvancedMultiEdgeCaliper(min_edge_distance=CALIPER_MIN_EDGE_DISTANCE,
 disk_segmentor_yolo = OnnxSegmentor(path=DISK_SEGMENT_MODEL_PATH,
                                     label=DISK_SEGMENT_MODEL_LABELS,
                                     conf_thres=DISK_SEGMENT_CONF_THRESH,
-                                    iou_thres=DISK_SEGMENT_IOU_THRESH,)
+                                    iou_thres=DISK_SEGMENT_IOU_THRESH,
+                                    preprocess_mode=DISK_SEGMENT_PREPROCESS_MODE,
+                                    rgb_input=DISK_SEGMENT_RGB_INPUT,
+                                    mask_decode=DISK_SEGMENT_MASK_DECODE,
+                                    tile_merge=DISK_SEGMENT_TILE_MERGE)
 
 num_disk = NUM_DISK
 max_disk_distance = MAX_DISK_DISTANCE
@@ -114,7 +133,10 @@ class BaseService:
             self._initialized = True
             # self.disk_segmentor = disk_segmentor
             self.disk_point_detect_model = disk_point_detect_model
+            self.point_slot_count = DISK_POINT_SLOT_COUNT
+            self.point_slot_completion = DISK_POINT_SLOT_COMPLETION
             self.point_classification_model = point_classification_model
+            self.classify_crop_width_ratio = POINT_CLASSIFY_CROP_WIDTH_RATIO
             self.caliper = caliper
 
             self.num_disk = num_disk

@@ -2,6 +2,29 @@
 
 Ngày rà soát: **2026-09-27**
 
+## Trạng thái triển khai source — 2026-09-28
+
+Đã hoàn thành phần source trước giai đoạn chuẩn bị dataset:
+
+- APP có **CameraFrameNormalizer** dùng chung: Cam1 clockwise, Cam2 counter-clockwise.
+- Rotation và ROI sau xoay nằm trong **APP/DiskInspection/App.config**; ROI đang để trống có chủ ý
+  cho đến khi duyệt ảnh ở các biên X/Y.
+- Production và Debug Form đều gửi canonical frame cho White/UV, kiểm tra hai ảnh cùng kích thước,
+  đồng thời giữ raw + normalized frame để truy vết.
+- **split_rows** cluster theo Y và chọn ba hàng phù hợp với số point kỳ vọng, không nhập cluster overlap
+  nhỏ vào hàng cuối.
+- Đã có regression test cho chiều xoay, ROI, White/UV mapping và overlap.
+- Có script **SERVICE/src/tools/normalize_factory_frames.py** để normalize batch và tạo contact sheet,
+  không sửa ảnh raw.
+
+Ví dụ chạy từ thư mục SERVICE:
+
+    .\.venv\Scripts\python.exe src\tools\normalize_factory_frames.py --cam1-dir C:\factory\Cam1 --cam2-dir C:\factory\Cam2 --output C:\factory\normalization-review
+
+Sau khi chốt ROI, điền cùng giá trị **x,y,width,height** vào **Cam1NormalizedRoi** /
+**Cam2NormalizedRoi** trong APP và các tham số **--cam1-roi** / **--cam2-roi** khi chạy script.
+Các bước cần dữ liệu hoặc phần cứng thật vẫn để mở trong checklist bên dưới.
+
 ## 1. Kết luận ngắn
 
 Phương án nên triển khai là:

@@ -5,6 +5,7 @@ import numpy as np
 from src.dtos.meta import DataResponse, ErrorCode, DataDebugResponse, DataResponseUv, DataDebugUVResponse, \
     InspectionState, ClassifyResult, Params
 from src.service.base_service import BaseService
+from src.tools.slot_geometry import complete_slot_rows
 import base64
 import ast
 
@@ -101,7 +102,7 @@ class DiskCheckingService(BaseService):
             min_dist: float,
             max_dist: float,
             axis: int = 0,
-            line_thickness: int = 2,
+            line_thickness: int = 1,
             font_scale: float = 0.45,
             midpoint_radius: int = 7
     ):
@@ -185,7 +186,7 @@ class DiskCheckingService(BaseService):
             center: tuple,
             caliper_result: dict,
             axis: int = 0,
-            line_thickness: int = 2,
+            line_thickness: int = 1,
             midpoint_radius: int = 7,
 
     ):
@@ -306,7 +307,7 @@ class DiskCheckingService(BaseService):
                 offset_x = 4
                 offset_y = 2
                 (tw, th), _ = cv2.getTextSize(f"{class_name.upper()}", cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
-                cv2.rectangle(image, (int(box[0]), new_y1), (int(box[2]), new_y2), color, 2)
+                cv2.rectangle(image, (int(box[0]), new_y1), (int(box[2]), new_y2), color, 1)
 
                 cv2.rectangle(image, (int(box[0]), new_y2 - th - offset_y), (int(box[0]) + tw + offset_x, new_y2),
                               color, cv2.FILLED)
@@ -424,8 +425,8 @@ class DiskCheckingService(BaseService):
         return np.array(new_boxes, dtype=np.float32)
 
     @staticmethod
-    def split_rows(boxes, expected_rows=3):
-        """Split detected point boxes into top-to-bottom rows."""
+    def split_rows(boxes, expected_rows=3, expected_points_per_row=None):
+        """Split point boxes into the best three physical rows and ignore small extra clusters."""
         boxes = np.asarray(boxes, dtype=np.float32)
         if boxes.ndim != 2 or boxes.shape[1] != 4 or len(boxes) < expected_rows:
             raise ValueError("Not enough valid point boxes to split rows")
@@ -440,9 +441,52 @@ class DiskCheckingService(BaseService):
         gaps = np.diff(centers_y)
         if len(gaps) < expected_rows - 1:
             raise ValueError("Cannot find three point rows")
-        split_indexes = np.sort(np.argsort(gaps)[-(expected_rows - 1):])
-        rows = np.split(boxes_sorted, split_indexes + 1)
-        if len(rows) != expected_rows or any(len(row) == 0 for row in rows):
+        box_heights = boxes_sorted[:, 3] - boxes_sorted[:, 1]
+        cluster_gap = max(10.0, float(np.median(box_heights)) * 1.5)
+        split_indexes = np.flatnonzero(gaps > cluster_gap)
+        candidates = [row for row in np.split(boxes_sorted, split_indexes + 1) if len(row)]
+
+        # If perspective/noise prevented the adaptive threshold from finding all
+        # rows, retain the old largest-gap fallback for exactly three groups.
+        if len(candidates) < expected_rows:
+            split_indexes = np.sort(np.argsort(gaps)[-(expected_rows - 1):])
+            candidates = list(np.split(boxes_sorted, split_indexes + 1))
+
+        if len(candidates) < expected_rows:
+            raise ValueError("Cannot find three point rows")
+
+        if len(candidates) == expected_rows:
+            rows = candidates
+        else:
+            # Detector false positives in the overlap form a fourth, usually small
+            # Y-cluster. Select the three rows whose counts best match the physical
+            # tray, with spacing consistency as a deterministic tie-breaker.
+            best_score = None
+            rows = None
+            for i in range(len(candidates) - 2):
+                for j in range(i + 1, len(candidates) - 1):
+                    for k in range(j + 1, len(candidates)):
+                        choice = [candidates[i], candidates[j], candidates[k]]
+                        row_centers = np.array([
+                            np.median((row[:, 1] + row[:, 3]) / 2.0) for row in choice
+                        ], dtype=np.float32)
+                        row_gaps = np.diff(row_centers)
+                        if np.any(row_gaps <= 0):
+                            continue
+                        spacing_penalty = float(np.std(row_gaps) / max(np.mean(row_gaps), 1.0))
+                        spread_penalty = sum(float(np.std((row[:, 1] + row[:, 3]) / 2.0)) for row in choice)
+                        count_penalty = 0.0
+                        if expected_points_per_row is not None:
+                            for row in choice:
+                                missing = max(0, expected_points_per_row - len(row))
+                                extra = max(0, len(row) - expected_points_per_row)
+                                count_penalty += missing * 1000.0 + extra * 10.0
+                        score = count_penalty + spacing_penalty * 100.0 + spread_penalty
+                        if best_score is None or score < best_score:
+                            best_score = score
+                            rows = choice
+
+        if rows is None or len(rows) != expected_rows or any(len(row) == 0 for row in rows):
             raise ValueError("Cannot find three point rows")
 
         # Keep every row deterministic and make representative box selection stable.
@@ -546,8 +590,12 @@ class DiskCheckingService(BaseService):
         # Không clamp: numpy tự cắt nếu vượt ảnh
         return [max(x1_new, 0), max(y1_new, 0), max(x2_new, 0), max(y2_new, 0)]
 
-    def get_line_boxes_ratio_shift(self, image, line_boxes, direction, ratio_width=1.5, ratio_height=1.5,
+    def get_line_boxes_ratio_shift(self, image, line_boxes, direction, ratio_width=None, ratio_height=1.5,
                                    ratio_shift_y=0.5):
+        if ratio_width is None:
+            ratio_width = getattr(self, 'classify_crop_width_ratio', 1.5)
+        if not np.isfinite(ratio_width) or ratio_width <= 0:
+            raise ValueError('Classifier crop width ratio must be finite and positive')
         boxes = []
         for box in line_boxes:
             new_box = self.get_ratio_shift_box(image, box, direction, ratio_width, ratio_height, ratio_shift_y)
@@ -760,10 +808,10 @@ class DiskCheckingService(BaseService):
     def check_disk_debug(self, image, params):
         return self._check_white(image, params, debug=True)
 
-    def _white_failure(self, image, debug):
+    def _white_failure(self, image, debug, geometry_status=None):
         encoded = self._convert_2_base64(image)
         error = dict(Result=InspectionState.NG, ErrorCode=ErrorCode.ERR_NUM_DISK[0],
-                     ErrorDesc=ErrorCode.ERR_NUM_DISK[1])
+                     ErrorDesc=ErrorCode.ERR_NUM_DISK[1], PointGeometryStatus=geometry_status)
         if debug:
             return DataDebugResponse(**error, DetectImg=encoded, FinalImg=encoded,
                                      SegmentImg=self._convert_2_base64(np.zeros(image.shape[:2], dtype=np.uint8)))
@@ -773,7 +821,9 @@ class DiskCheckingService(BaseService):
         boxes, confs, cls_idxs = self.disk_point_detect_model.detect_objects_debug(
             image, params.detect_threshold, params.detect_iou)
         expected_rows = 3
-        if len(boxes) < params.disk_num * expected_rows:
+        slot_count = getattr(self, 'point_slot_count', params.disk_num)
+        complete_slots = getattr(self, 'point_slot_completion', False)
+        if len(boxes) < slot_count * expected_rows and not complete_slots:
             return self._white_failure(image, debug)
         detect_image = None
         if debug:
@@ -781,12 +831,24 @@ class DiskCheckingService(BaseService):
             self.draw_detected_boxes(detect_image, boxes, confs, cls_idxs)
 
         # Group point detections into the three physical rows.
+        inferred_slots = []
         try:
-            boxes_l1, boxes_l2, boxes_l3 = self.split_rows(boxes, expected_rows=expected_rows)
-        except ValueError:
+            boxes_l1, boxes_l2, boxes_l3 = self.split_rows(
+                boxes, expected_rows=expected_rows, expected_points_per_row=slot_count)
+            if complete_slots:
+                (boxes_l1, boxes_l2, boxes_l3), inferred_slots = complete_slot_rows(
+                    (boxes_l1, boxes_l2, boxes_l3), image.shape, slot_count)
+        except ValueError as ex:
+            return self._white_failure(image, debug, 'rejected: ' + str(ex))
+        if any(len(row) < slot_count for row in (boxes_l1, boxes_l2, boxes_l3)):
             return self._white_failure(image, debug)
-        if any(len(row) < params.disk_num for row in (boxes_l1, boxes_l2, boxes_l3)):
-            return self._white_failure(image, debug)
+        geometry_status = 'completed' if inferred_slots else 'detected'
+        if debug:
+            for item in inferred_slots:
+                x1,y1,x2,y2 = map(int,item['box'])
+                cv2.rectangle(detect_image,(x1,y1),(x2,y2),(0,215,255),2)
+                cv2.putText(detect_image,f"INFER R{item['row']} S{item['slot']}",(x1,max(15,y1-5)),
+                            cv2.FONT_HERSHEY_SIMPLEX,.45,(0,215,255),1)
 
         # Rectify the complete tray from the two outer point rows.
         crop_img, matrix, (crop_width, _), crop_quad = self.full_rectify_pipeline(
@@ -796,13 +858,13 @@ class DiskCheckingService(BaseService):
         boxes_l2 = self.update_boxes_after_warp(boxes_l2, matrix)
         boxes_l3 = self.update_boxes_after_warp(boxes_l3, matrix)
 
-        # The UV contract remains two regions: below row 1 and above row 3.
-        row1_reference = np.median(boxes_l1, axis=0)
-        row3_reference = np.median(boxes_l3, axis=0)
-        uv_box_l1 = self.get_uv_box(row1_reference, crop_width, start_ratio=0.0,
-                                    ratio_height=2.0, direction="bottom")
-        uv_box_l3 = self.get_uv_box(row3_reference, crop_width, start_ratio=0.0,
-                                    ratio_height=2.0, direction="top")
+        # Inspect the two illuminated faces beside the middle support, not
+        # the outer supports. Keep the two-band API and exclude the support.
+        middle_reference = np.median(boxes_l2, axis=0)
+        uv_box_1 = self.get_uv_box(middle_reference, crop_width, start_ratio=0.0,
+                                 ratio_height=2.0, direction="top")
+        uv_box_2 = self.get_uv_box(middle_reference, crop_width, start_ratio=0.0,
+                                 ratio_height=2.0, direction="bottom")
 
         # Classify all four faces around the three point rows. Merge each face
         # independently so boxes at the same X on different rows are not combined.
@@ -934,21 +996,23 @@ class DiskCheckingService(BaseService):
 
         if debug:
             return DataDebugResponse(Result=sum_res, ErrorCode=error_code, ErrorDesc=error_desc,
+                                     InferredSlots=inferred_slots, PointGeometryStatus=geometry_status,
                                      DetectImg=self._convert_2_base64(detect_image),
                                      SegmentImg=self._convert_2_base64(segment_image),
                                      FinalImg=self._convert_2_base64(crop_img),
-                                     CropBox=str(crop_quad.tolist()), UvBox1=str(uv_box_l1.tolist()),
-                                     UvBox2=str(uv_box_l3.tolist()), Mid1=str(mids_1), Mid2=str(mids_3))
+                                     CropBox=str(crop_quad.tolist()), UvBox1=str(uv_box_1.tolist()),
+                                     UvBox2=str(uv_box_2.tolist()), Mid1=str(mids_1), Mid2=str(mids_3))
 
         return DataResponse(Result=sum_res,
+                            InferredSlots=inferred_slots, PointGeometryStatus=geometry_status,
                             ErrorCode=error_code,
                             ErrorDesc=error_desc,
                             ResImg=self._convert_2_base64(crop_img),
                             MaxDiskDistance=max_disk_distance,
                             MinDiskDistance=min_disk_distance,
                             CropBox=str(crop_quad.tolist()),
-                            UvBox1=str(uv_box_l1.tolist()),
-                            UvBox2=str(uv_box_l3.tolist()),
+                            UvBox1=str(uv_box_1.tolist()),
+                            UvBox2=str(uv_box_2.tolist()),
                             Mid1=str(mids_1),
                             Mid2=str(mids_3),
                             )
@@ -1183,7 +1247,8 @@ if __name__ == '__main__':
 
 
         # Group and rectify the three point rows exactly as the production path.
-        boxes_l1, boxes_l2, boxes_l3 = disk_checking_service.split_rows(boxes)
+        boxes_l1, boxes_l2, boxes_l3 = disk_checking_service.split_rows(
+            boxes, expected_points_per_row=disk_checking_service.num_disk)
         crop_img, matrix, _, _ = disk_checking_service.full_rectify_pipeline(
             image, boxes_l1, boxes_l3, expand_ratio_x=0.2, expand_ratio_y=0.1)
         boxes_l1 = disk_checking_service.update_boxes_after_warp(boxes_l1, matrix)

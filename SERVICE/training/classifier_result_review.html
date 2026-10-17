@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sửa nhãn classifier — ảnh lệch nhãn</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:24px;background:#171b22;color:#edf1f8;font:15px system-ui}a{color:#a0d7ff}p{line-height:1.5}button,select,input{font:inherit;padding:8px;background:#293444;color:#fff;border:1px solid #67748a;border-radius:5px}button{cursor:pointer}button:disabled{opacity:.45;cursor:wait}button.selected{background:#265744;border:2px solid #6de2b0}button:focus-visible{outline:3px solid #8ad1ff}.controls,.pager{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:18px 0}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:16px}article{padding:14px;background:#232d3c;border:1px solid #435169;border-radius:8px;overflow-wrap:anywhere}article.changed{border-color:#e6b56b}article.reviewed{background:#233b35}img{width:100%;height:220px;object-fit:contain;background:#10141a}.labels{display:flex;gap:7px;flex-wrap:wrap}.notes{width:100%;margin-top:10px}.feedback{min-height:24px;color:#a8efc9}.feedback.error,#status.error{color:#ffaca5}.muted,small,details{color:#c0cddd}.summary{background:#263248;padding:12px;border-radius:6px}table{border-collapse:collapse}th,td{padding:9px;text-align:left;border-bottom:1px solid #516179}#grid:empty{padding:24px}body.hide-predictions .prediction{display:none}.sticky{position:sticky;top:0;background:#171b22eF;padding:8px;z-index:1}h1{font-size:25px}
+</style>
+<h1>Sửa nhãn các ảnh classifier dự đoán lệch</h1>
+<p>Chọn nhãn đúng theo <b>rãnh mục tiêu</b>: <b>ok</b> = 1 đĩa; <b>ng</b> = nhiều hơn 1; <b>no_disk</b> = không có đĩa. Đĩa ở rãnh bên cạnh / hai mép của cùng một đĩa không tính là thêm đĩa.</p>
+<p>Bấm nhãn để <b>lưu ngay</b>; bấm lại nhãn cũ để xác nhận nhãn cũ đúng. Nhãn gốc, dự đoán, confidence và báo cáo cũ giữ nguyên. Ảnh đã sửa vẫn ở danh sách; đây chỉ là rà ảnh lệch, <b>chưa train lại / chưa cập nhật model</b>.</p>
+<details><summary>Chỉ số đánh giá gốc — CHƯA tính lại theo nhãn sửa</summary><div id="metrics"></div><p><a href="index.html">Trang kết quả gốc</a> · <a href="report.json">Báo cáo gốc</a> · <a href="label_review/decisions.json">Nhãn sửa + lịch sử (sau lần lưu đầu)</a></p><p>HA test cùng phiên chụp, không phải test thực tế độc lập. Sửa test chỉ để đánh giá lại, không tự đưa vào train.</p></details>
+<div class="sticky"><div id="progress" class="summary">Đang tải…</div><div id="status" role="status" aria-live="polite"></div></div>
+<div class="controls">
+<label>Xem <select id="mode"><option value="new">Ảnh model mới lệch nhãn gốc</option><option value="all">Một trong hai model lệch nhãn gốc</option><option value="miss">NG gốc bị model mới bỏ sót</option></select></label>
+<label>Tập <select id="domain"><option value="">Tất cả</option><option value="ha_test">HA test</option><option value="ha_val">HA validation</option><option value="ha_train">HA train</option><option value="legacy_val">Validation cũ</option></select></label>
+<label>Trạng thái <select id="review"><option value="">Tất cả</option><option value="pending">Chưa rà</option><option value="reviewed">Đã rà</option><option value="changed">Đã đổi nhãn</option></select></label>
+<label>Nhãn gốc <select id="label"><option value="">Tất cả</option><option>ng</option><option>ok</option><option>no_disk</option></select></label>
+<label>Confidence mới <select id="sort"><option value="asc">Thấp → cao</option><option value="desc">Cao → thấp</option></select></label>
+<label><input id="hide" type="checkbox"> Ẩn dự đoán để tự rà</label>
+</div>
+<div class="pager"><button id="prev">← Trang trước</button><span id="page"></span><button id="next">Trang sau →</button><span id="count"></span></div>
+<div id="grid" class="grid"></div>
+<script>
+let items=[],state={decisions:{},revision:0},digest='',page=0,busy=false;
+const size=48,$=id=>document.getElementById(id);
+function el(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;}
+function filtered(){const mode=$('mode').value,domain=$('domain').value,review=$('review').value,label=$('label').value;return items.filter(item=>{
+ const decision=state.decisions[item.id],changed=decision&&decision.label!==item.original_label;
+ return (!domain||item.domain===domain)&&(!label||item.original_label===label)&&
+ (mode!=='new'||item.predictions.candidate.label!==item.original_label)&&
+ (mode!=='miss'||(item.original_label==='ng'&&item.predictions.candidate.label!=='ng'))&&
+ (!review||(review==='pending'&&!decision)||(review==='reviewed'&&decision)||(review==='changed'&&changed));
+}).sort((a,b)=>($('sort').value==='asc'?1:-1)*(a.predictions.candidate.confidence-b.predictions.candidate.confidence)||a.id.localeCompare(b.id));}
+function updateProgress(){const values=Object.entries(state.decisions),changed=values.filter(([id,d])=>d.label!==d.original_label).length;
+ $('progress').textContent=`Đã rà ${values.length}/${items.length} ảnh lệch của hai model · Đã đổi ${changed} nhãn · Chưa rà ${items.length-values.length} · Revision ${state.revision}`;}
+function toggleSaving(value){busy=value;for(const button of document.querySelectorAll('.labels button,.reset'))button.disabled=value;}
+async function save(item,label,notes,action='save',feedback){if(busy)return;toggleSaving(true);feedback.className='feedback';feedback.textContent='Đang lưu…';$('status').textContent='Đang lưu '+item.id;$('status').className='';
+ try{const response=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({evaluation_sha256:digest,revision:state.revision,decisions:[{id:item.id,label,notes,action}]})});
+ const result=await response.json();if(!response.ok)throw Error(result.error||'Không lưu được');state=result.state;updateProgress();
+ // Keep the card in place after saving; only explicit filter/pagination changes remove it.
+ const card=feedback.parentNode;const decision=state.decisions[item.id];card.className=decision?(decision.label===item.original_label?'reviewed':'changed'):'';
+ for(const button of card.querySelectorAll('.labels button'))button.className=decision&&button.dataset.label===decision.label?'selected':'';
+ card.querySelector('.current').textContent=decision?`Nhãn đã xác nhận: ${decision.label}`:'Chưa rà — đang dùng nhãn gốc';
+ feedback.textContent=action==='reset'?'Đã bỏ xác nhận; lịch sử vẫn được giữ.':`Đã lưu: ${label}${label!==item.original_label?' (sửa từ '+item.original_label+')':' (giữ nhãn cũ)'}`;
+ $('status').textContent='Đã lưu vào máy. Không train lại / không sửa báo cáo gốc.';
+ }catch(error){feedback.className='feedback error';feedback.textContent='CHƯA LƯU: '+error.message;$('status').className='error';$('status').textContent='CHƯA LƯU. '+error.message;}
+ finally{toggleSaving(false);}}
+function card(item){const decision=state.decisions[item.id],node=el('article');node.className=decision?(decision.label===item.original_label?'reviewed':'changed'):'';
+ const link=el('a');link.href=item.image;link.target='_blank';link.rel='noopener';const image=el('img');image.src=item.image;image.alt=item.id;image.loading='lazy';link.append(image);node.append(link);
+ node.append(el('p',`Nhãn gốc: ${item.original_label} · ${item.domain}`));
+ node.append(el('p',decision?`Nhãn đã xác nhận: ${decision.label}`:'Chưa rà — đang dùng nhãn gốc','current'));
+ for(const [key,name] of [['candidate','Model mới'],['baseline','Model cũ']]){const p=item.predictions[key];node.append(el('p',`${name}: ${p.label} · confidence ${p.confidence.toFixed(6)}`,'prediction'));}
+ node.append(el('small',item.id));if(item.slot!=null)node.append(el('p',`Rãnh ${item.slot} · ${item.region}`,'muted'));
+ const buttons=el('div',undefined,'labels'),notes=el('input'),feedback=el('p','', 'feedback');notes.className='notes';notes.placeholder='Ghi chú rồi bấm nhãn để lưu (tùy chọn)';notes.maxLength=2000;notes.value=decision?.notes||'';notes.setAttribute('aria-label','Ghi chú cho '+item.id);
+ for(const label of ['ng','ok','no_disk']){const button=el('button',label);button.dataset.label=label;button.className=decision?.label===label?'selected':'';button.setAttribute('aria-label','Xác nhận '+label+' cho '+item.id);button.onclick=()=>save(item,label,notes.value,'save',feedback);buttons.append(button);}
+ const reset=el('button','Bỏ xác nhận','reset');reset.onclick=()=>save(item,null,'','reset',feedback);buttons.append(reset);node.append(notes,buttons,feedback);
+ const details=el('details'),summary=el('summary','Nguồn / scores'),scores=el('p',JSON.stringify(item.predictions.candidate.probabilities),'prediction');details.append(summary,el('p',item.path),scores);node.append(details);return node;}
+function render(){const values=filtered(),pages=Math.max(1,Math.ceil(values.length/size));page=Math.max(0,Math.min(page,pages-1));$('grid').replaceChildren(...values.slice(page*size,(page+1)*size).map(card));if(!values.length)$('grid').textContent='Không có ảnh phù hợp bộ lọc.';
+ $('page').textContent=`Trang ${page+1}/${pages}`;$('count').textContent=`${values.length} ảnh · tối đa ${size}/trang`;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;updateProgress();if(busy)toggleSaving(true);}
+function metrics(report){const table=el('table'),head=el('tr');for(const text of ['Tập','Số crop','Accuracy cũ → mới','NG bỏ sót cũ → mới'])head.append(el('th',text));table.append(head);
+ for(const domain of ['ha_test','ha_val','legacy_val']){const row=report.domains[domain];if(!row)continue;const a=row.baseline,b=row.candidate,tr=el('tr');for(const text of [domain,row.count,`${(a.accuracy*100).toFixed(2)}% → ${(b.accuracy*100).toFixed(2)}%`,`${a.ng_as_ok+a.ng_as_no_disk} → ${b.ng_as_ok+b.ng_as_no_disk}`])tr.append(el('td',String(text)));table.append(tr);}$('metrics').replaceChildren(table);}
+for(const id of ['mode','domain','review','label','sort'])$(id).addEventListener('change',()=>{page=0;render();});
+$('prev').onclick=()=>{if(busy)return;page--;render();};$('next').onclick=()=>{if(busy)return;page++;render();};
+$('hide').addEventListener('change',()=>document.body.classList.toggle('hide-predictions',$('hide').checked));
+async function load(){try{const response=await fetch('/api/review',{cache:'no-store'});if(!response.ok)throw Error('Không tải được nhãn');const payload=await response.json();items=payload.items;state=payload.state;digest=payload.evaluation_sha256;metrics(payload.report);render();$('status').textContent='Chọn ng / ok / no_disk dưới từng ảnh để lưu.';}catch(error){$('status').className='error';$('status').textContent=error.message;}}
+load();
+</script></html>

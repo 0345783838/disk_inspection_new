@@ -77,10 +77,13 @@ def xywh2xyxy(x):
 
 
 class OnnxDetector:
-    def __init__(self, path: str, label: list, conf_thres : float = 0.7, iou_thres: float = 0.5):
+    def __init__(self, path: str, label: list, conf_thres : float = 0.7, iou_thres: float = 0.5,
+                 input_roi=None, canonical_size=None):
         self.conf_threshold = conf_thres
         self.iou_threshold = iou_thres
         self.labels = label
+        self.input_roi = input_roi
+        self.canonical_size = canonical_size
 
         # Initialize model
         self.initialize_model(path)
@@ -96,6 +99,7 @@ class OnnxDetector:
         self.get_output_details()
 
     def detect_objects(self, image):
+        image, offset = self.detector_image(image)
         img_height, img_width = image.shape[:2]
         input_tensor = self.prepare_input(image)
 
@@ -104,9 +108,10 @@ class OnnxDetector:
 
         boxes, scores, class_ids = self.process_output(outputs, img_width, img_height)
 
-        return boxes, scores, class_ids
+        return self.offset_boxes(boxes, offset), scores, class_ids
 
     def detect_objects_debug(self, image, conf_threshold, iou_threshold):
+        image, offset = self.detector_image(image)
         img_height, img_width = image.shape[:2]
         input_tensor = self.prepare_input(image)
 
@@ -115,7 +120,22 @@ class OnnxDetector:
 
         boxes, scores, class_ids = self.process_output_debug(outputs, img_width, img_height, conf_threshold, iou_threshold)
 
-        return boxes, scores, class_ids
+        return self.offset_boxes(boxes, offset), scores, class_ids
+
+    def detector_image(self, image):
+        if self.canonical_size and (image.shape[1], image.shape[0]) != tuple(self.canonical_size):
+            raise ValueError('Detector requires canonical frame size ' + str(self.canonical_size))
+        if not self.input_roi:
+            return image, (0, 0)
+        x, y, width, height = self.input_roi
+        if min(x, y) < 0 or min(width, height) <= 0 or x + width > image.shape[1] or y + height > image.shape[0]:
+            raise ValueError('Detector input ROI is outside the canonical frame')
+        return image[y:y+height, x:x+width], (x, y)
+
+    @staticmethod
+    def offset_boxes(boxes, offset):
+        boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
+        return boxes + np.array([offset[0], offset[1], offset[0], offset[1]], dtype=np.float32)
 
     def prepare_input(self, image):
 

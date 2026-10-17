@@ -47,6 +47,7 @@ namespace DiskInspection.Views.DebugWindows
         private CameraManager _cameraManager;
         private LincolnCamera _selectedCamera;
         private string _selectedCameraName;
+        private readonly CameraFrameNormalizer _frameNormalizer;
         private bool _checking;
         private bool _firstTime = true;
 
@@ -122,6 +123,7 @@ namespace DiskInspection.Views.DebugWindows
         {
             InitializeComponent();
             DataContext = this;
+            _frameNormalizer = CameraFrameNormalizer.FromAppSettings();
             GetEnvConfig();
             ImagesInfoList.CollectionChanged += (s, e) => OnPropertyChanged(nameof(MaxValue));
             _cameraManager = CameraManager.GetInstance();
@@ -269,19 +271,24 @@ namespace DiskInspection.Views.DebugWindows
                 {
                     var current = items[i];
                     if (!IsWhite(current.FilePath)) continue;
+                    int cameraId = ResolveCameraId(current.FilePath);
                     var white = await Task.Run(() =>
                     {
-                        using (var image = CvInvoke.Imread(current.FilePath))
+                        using (var rawImage = CvInvoke.Imread(current.FilePath))
+                        using (var rawBitmap = SafeBitmapFromMat(rawImage))
+                        using (var normalized = _frameNormalizer.Normalize(rawBitmap, cameraId))
+                        using (var image = new Image<Bgr, byte>(normalized))
                         {
-                            var response = APICommunication.DebugImages(_param.ApiUrlAi, image, _envConfig);
+                            var response = APICommunication.DebugImages(_param.ApiUrlAi, image.Mat, _envConfig);
                             if (response == null) throw new InvalidOperationException("White debug request failed.");
                             return (response, new List<ImageList>
                             {
-                                new ImageList(0, "Original Image", SafeBitmapFromMat(image)),
-                                new ImageList(1, "Detect Image", Converter.Base64ToBitmap(response.DetectImg)),
-                                new ImageList(2, "Segment Image", Converter.Base64ToBitmap(response.SegmentImg)),
-                                new ImageList(3, "Final Image", Converter.Base64ToBitmap(response.FinalImg))
-                            });
+                                new ImageList(0, "Raw Image", new Bitmap(rawBitmap)),
+                                new ImageList(1, "Normalized Image", new Bitmap(normalized)),
+                                new ImageList(2, "Detect Image", Converter.Base64ToBitmap(response.DetectImg)),
+                                new ImageList(3, "Segment Image", Converter.Base64ToBitmap(response.SegmentImg)),
+                                new ImageList(4, "Final Image", Converter.Base64ToBitmap(response.FinalImg))
+                            }, normalized.Size);
                         }
                     });
                     current.Images = white.Item2;
@@ -291,6 +298,9 @@ namespace DiskInspection.Views.DebugWindows
                     if (i + 1 >= items.Count || !IsUV(items[i + 1].FilePath) ||
                         GetBaseKey(items[i + 1].FilePath) != GetBaseKey(current.FilePath)) continue;
                     var next = items[++i];
+                    int uvCameraId = ResolveCameraId(next.FilePath);
+                    if (uvCameraId != cameraId)
+                        throw new InvalidOperationException("White and UV debug files resolve to different cameras.");
                     if (!white.Item1.HasUvGeometry)
                     {
                         AppLogger.Instance.Info("UV debug skipped because White could not locate the tray.", "DEBUG");
@@ -298,17 +308,23 @@ namespace DiskInspection.Views.DebugWindows
                     }
                     var uv = await Task.Run(() =>
                     {
-                        using (var image = CvInvoke.Imread(next.FilePath))
+                        using (var rawImage = CvInvoke.Imread(next.FilePath))
+                        using (var rawBitmap = SafeBitmapFromMat(rawImage))
+                        using (var normalized = _frameNormalizer.Normalize(rawBitmap, uvCameraId))
+                        using (var image = new Image<Bgr, byte>(normalized))
                         {
+                            if (normalized.Size != white.Item3)
+                                throw new InvalidOperationException("White/UV normalized debug frames have different dimensions.");
                             var geometry = white.Item1;
-                            var response = APICommunication.DebugUvImages(_param.ApiUrlAi, image, geometry.CropBox,
+                            var response = APICommunication.DebugUvImages(_param.ApiUrlAi, image.Mat, geometry.CropBox,
                                 geometry.UvBox1, geometry.UvBox2, geometry.Mid1, geometry.Mid2, _envConfig);
                             if (response == null) throw new InvalidOperationException("UV debug request failed.");
                             return (response, new List<ImageList>
                             {
-                                new ImageList(0, "Original UV Image", SafeBitmapFromMat(image)),
-                                new ImageList(1, "Threshold UV Image", Converter.Base64ToBitmap(response.ThresholdImg)),
-                                new ImageList(2, "Final UV Image", Converter.Base64ToBitmap(response.FinalImg))
+                                new ImageList(0, "Raw UV Image", new Bitmap(rawBitmap)),
+                                new ImageList(1, "Normalized UV Image", new Bitmap(normalized)),
+                                new ImageList(2, "Threshold UV Image", Converter.Base64ToBitmap(response.ThresholdImg)),
+                                new ImageList(3, "Final UV Image", Converter.Base64ToBitmap(response.FinalImg))
                             });
                         }
                     });
@@ -339,6 +355,18 @@ namespace DiskInspection.Views.DebugWindows
                 return new Bitmap(bmp); // deep copy, độc lập bộ nhớ
         }
 
+        private int ResolveCameraId(string path = null)
+        {
+            string value = path ?? string.Empty;
+            bool cam1 = Regex.IsMatch(value, @"(?i)(cam(?:era)?[\s_-]*1|uv[\s_-]*1)");
+            bool cam2 = Regex.IsMatch(value, @"(?i)(cam(?:era)?[\s_-]*2|uv[\s_-]*2)");
+            if (cam1 != cam2) return cam1 ? 1 : 2;
+            if (_selectedCameraName == CameraName.CAM_1) return 1;
+            if (_selectedCameraName == CameraName.CAM_2) return 2;
+            throw new InvalidOperationException(
+                "Cannot determine camera. Select Camera 1/2 or include Cam1/Cam2 in the file path.");
+        }
+
         private async void btnTriggerSoftware_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (_checking) return;
@@ -354,7 +382,8 @@ namespace DiskInspection.Views.DebugWindows
             try
             {
                 using (var frame = await CaptureDebugFrameAsync(InspectionLight.White))
-                using (var image = new Image<Bgr, byte>(frame))
+                using (var normalizedWhite = _frameNormalizer.Normalize(frame, ResolveCameraId()))
+                using (var image = new Image<Bgr, byte>(normalizedWhite))
                 {
                     var white = await Task.Run(() => APICommunication.DebugImages(_param.ApiUrlAi, image.Mat, _envConfig));
                     if (white == null) throw new InvalidOperationException("White debug request failed.");
@@ -363,18 +392,22 @@ namespace DiskInspection.Views.DebugWindows
                         Status = white.Result,
                         Images = new List<ImageList>
                         {
-                            new ImageList(0, "Original Image", new Bitmap(frame)),
-                            new ImageList(1, "Detect Image", Converter.Base64ToBitmap(white.DetectImg)),
-                            new ImageList(2, "Segment Image", Converter.Base64ToBitmap(white.SegmentImg)),
-                            new ImageList(3, "Final Image", Converter.Base64ToBitmap(white.FinalImg))
+                            new ImageList(0, "Raw Image", new Bitmap(frame)),
+                            new ImageList(1, "Normalized Image", new Bitmap(normalizedWhite)),
+                            new ImageList(2, "Detect Image", Converter.Base64ToBitmap(white.DetectImg)),
+                            new ImageList(3, "Segment Image", Converter.Base64ToBitmap(white.SegmentImg)),
+                            new ImageList(4, "Final Image", Converter.Base64ToBitmap(white.FinalImg))
                         }
                     };
                     ImagesInfoList.Add(item);
                     SelectedImageInfo = item;
                     if (!white.HasUvGeometry) return;
                     using (var uvFrame = await CaptureDebugFrameAsync(InspectionLight.Uv))
-                    using (var uvImage = new Image<Bgr, byte>(uvFrame))
+                    using (var normalizedUv = _frameNormalizer.Normalize(uvFrame, ResolveCameraId()))
+                    using (var uvImage = new Image<Bgr, byte>(normalizedUv))
                     {
+                        if (normalizedUv.Size != normalizedWhite.Size)
+                            throw new InvalidOperationException("White/UV normalized debug frames have different dimensions.");
                         var uv = await Task.Run(() => APICommunication.DebugUvImages(_param.ApiUrlAi, uvImage.Mat,
                             white.CropBox, white.UvBox1, white.UvBox2, white.Mid1, white.Mid2, _envConfig));
                         if (uv == null) throw new InvalidOperationException("UV debug request failed.");
@@ -383,9 +416,10 @@ namespace DiskInspection.Views.DebugWindows
                             Status = uv.Result ? (int)FileStatus.OK : (int)FileStatus.NG,
                             Images = new List<ImageList>
                             {
-                                new ImageList(0, "Original UV Image", new Bitmap(uvFrame)),
-                                new ImageList(1, "Threshold UV Image", Converter.Base64ToBitmap(uv.ThresholdImg)),
-                                new ImageList(2, "Final UV Image", Converter.Base64ToBitmap(uv.FinalImg))
+                                new ImageList(0, "Raw UV Image", new Bitmap(uvFrame)),
+                                new ImageList(1, "Normalized UV Image", new Bitmap(normalizedUv)),
+                                new ImageList(2, "Threshold UV Image", Converter.Base64ToBitmap(uv.ThresholdImg)),
+                                new ImageList(3, "Final UV Image", Converter.Base64ToBitmap(uv.FinalImg))
                             }
                         };
                         ImagesInfoList.Add(uvItem);

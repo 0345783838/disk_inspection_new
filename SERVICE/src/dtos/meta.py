@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 
 
 class DataResponse(BaseModel):
+    InferredSlots: List[dict] = Field(default_factory=list)
+    PointGeometryStatus: Optional[str] = None
     Result: int = Field(default=1, strict=True, ge=0, le=2)  # 0/1/2 - ok/ng/warning
     ErrorCode: Optional[str] = None  # ["PASS", "ERROR_001", "ERROR_002", "ERROR_003",...]
     ErrorDesc: Optional[str] = None  # ["Khay đĩa OK", "Khay đĩa bất thường",...]
@@ -25,6 +27,8 @@ class DataResponseUv(BaseModel):
 
 
 class DataDebugResponse(BaseModel):
+    InferredSlots: List[dict] = Field(default_factory=list)
+    PointGeometryStatus: Optional[str] = None
     Result: int = Field(default=1, strict=True, ge=0, le=2)  # 0/1/2 - ok/ng/warning
     ErrorCode: Optional[str] = None
     ErrorDesc: Optional[str] = None

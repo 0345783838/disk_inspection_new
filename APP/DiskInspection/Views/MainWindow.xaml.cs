@@ -100,6 +100,7 @@ namespace DiskInspection
                 userType == UserType.Engineer)
             {
                 var window = new CommonSettingsWindow();
+                _mainController.MarkHardwareMayBeActive();
                 window.Show();
             }
         }
@@ -112,6 +113,7 @@ namespace DiskInspection
                 userType == UserType.Engineer)
             {
                 var debugWindow = new DebugWindow();
+                _mainController.MarkHardwareMayBeActive();
                 debugWindow.Show();
             }
         }
@@ -133,6 +135,7 @@ namespace DiskInspection
                 btnSettings.IsEnabled = false;
                 btnStart.IsEnabled = false;
                 btnStop.IsEnabled = true;
+                miLocalWhite.IsEnabled = false;
             }
             else
             {
@@ -140,6 +143,7 @@ namespace DiskInspection
                 btnSettings.IsEnabled = true;
                 btnStart.IsEnabled = true;
                 btnStop.IsEnabled = false;
+                miLocalWhite.IsEnabled = true;
             }
         }
 
@@ -185,6 +189,7 @@ namespace DiskInspection
                 btnDebug.IsEnabled = false;
                 btnStart.IsEnabled = false;
                 btnStop.IsEnabled = false;
+                miLocalWhite.IsEnabled = false;
             }));
         }
         private void EnableWindows()
@@ -195,6 +200,55 @@ namespace DiskInspection
                 btnDebug.IsEnabled = true;
                 btnStop.IsEnabled = false;
                 btnStart.IsEnabled = true;
+                miLocalWhite.IsEnabled = true;
+            }));
+        }
+
+        private async void LocalWhite_Click(object sender, RoutedEventArgs e)
+        {
+            var userType = Login();
+            if (userType != UserType.Admin && userType != UserType.Worker && userType != UserType.Engineer) return;
+            int cameraId = int.Parse((string)((MenuItem)sender).Tag, CultureInfo.InvariantCulture);
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = $"Camera {cameraId}: select an UNROTATED RAW White image (not UV / crop)",
+                Filter = "Images|*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff",
+                Multiselect = false
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            DisableWindows();
+            try { await _mainController.InspectLocalWhiteAsync(dialog.FileName, cameraId); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                InspectionStatusCam1 = InspectionStatusCam2 = (int)StatusState.Unknown;
+                OnPropertyChanged(nameof(InspectionStatusCam1));
+                OnPropertyChanged(nameof(InspectionStatusCam2));
+                AppLogger.Instance.Error(ex.Message, "LOCAL DEBUG");
+                if (!_closing) ShowError($"Local White test failed: {ex.Message}");
+            }
+            finally { if (!_closing) EnableWindows(); }
+        }
+
+        internal void PrepareLocalWhiteUI(int cameraId)
+        {
+            Dispatcher.Invoke(new Action(() =>
+            {
+                miLocalNotice.Header = $"LOCAL CAM{cameraId} WHITE ONLY - UV / PLC NOT TESTED";
+                miLocalNotice.Visibility = Visibility.Visible;
+                imbCam1WhiteOrigin.Source = imbCam2WhiteOrigin.Source = null;
+                imbCam1WhiteResult.Source = imbCam2WhiteResult.Source = null;
+                imbCam1UvOrigin.Source = imbCam2UvOrigin.Source = null;
+                imbCam1UvResult.Source = imbCam2UvResult.Source = null;
+                InspectionStatus = InspectionStatusCam1 = InspectionStatusCam2 = (int)StatusState.Unknown;
+                lbFinishTimeCam1.Content = lbFinishTimeCam2.Content = "Not tested";
+                lbMaxDisCam1.Content = lbMaxDisCam2.Content = "...";
+                lbMinDisCam1.Content = lbMinDisCam2.Content = "...";
+                lbUvDiskCountCam1.Content = lbUvDiskCountCam2.Content = "Not tested";
+                lbTimestamp.Content = "LOCAL TEST - not a production cycle";
+                OnPropertyChanged(nameof(InspectionStatus));
+                OnPropertyChanged(nameof(InspectionStatusCam1));
+                OnPropertyChanged(nameof(InspectionStatusCam2));
             }));
         }
 
@@ -618,6 +672,7 @@ namespace DiskInspection
         {
             Dispatcher.BeginInvoke(new Action(() =>
             {
+                miLocalNotice.Visibility = Visibility.Collapsed;
                 UpdateCam1WhiteOrigin(null);
                 UpdateCam2WhiteOrigin(null);
                 UpdateCam1WhiteResult(null);

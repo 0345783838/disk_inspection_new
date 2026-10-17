@@ -57,14 +57,28 @@ class OnnxSegmentor:
         iou_thres: float = 0.5,
         num_masks=32,
         num_splits: int = 6,
-        overlap_ratio: float = 0.05
+        overlap_ratio: float = 0.05,
+        preprocess_mode: str = "stretch",
+        rgb_input: bool = False,
+        mask_decode: str = "legacy",
+        tile_merge: str = "max",
     ):
+        if preprocess_mode not in {"stretch", "letterbox"}:
+            raise ValueError(f"Unsupported preprocess_mode: {preprocess_mode}")
+        if mask_decode not in {"legacy", "native"}:
+            raise ValueError(f"Unsupported mask_decode: {mask_decode}")
+        if tile_merge not in {"max", "core"}:
+            raise ValueError(f"Unsupported tile_merge: {tile_merge}")
         self.conf_threshold = conf_thres
         self.iou_threshold = iou_thres
         self.labels = label
         self.num_masks = num_masks
         self.num_splits = num_splits
         self.overlap_ratio = overlap_ratio
+        self.preprocess_mode = preprocess_mode
+        self.rgb_input = rgb_input
+        self.mask_decode = mask_decode
+        self.tile_merge = tile_merge
 
         self.session = onnxruntime.InferenceSession(
             path,
@@ -88,10 +102,30 @@ class OnnxSegmentor:
         model_outputs = self.session.get_outputs()
         self.output_names = [i.name for i in model_outputs]
 
+    def _letterbox_transform(self, img_h, img_w):
+        """Derive geometry from this image, never from another in-flight request."""
+        if self.preprocess_mode != "letterbox":
+            return None
+        ratio = min(self.input_width / img_w, self.input_height / img_h)
+        return (ratio,
+                (self.input_width - round(img_w * ratio)) // 2,
+                (self.input_height - round(img_h * ratio)) // 2)
+
     def prepare_input(self, image):
         img_h, img_w = image.shape[:2]
-
-        input_img = cv2.resize(image, (self.input_width, self.input_height))
+        transform = self._letterbox_transform(img_h, img_w)
+        if transform is not None:
+            ratio, pad_x, pad_y = transform
+            resized_w = round(img_w * ratio)
+            resized_h = round(img_h * ratio)
+            input_img = np.full((self.input_height, self.input_width, 3),
+                                114, dtype=np.uint8)
+            input_img[pad_y:pad_y + resized_h, pad_x:pad_x + resized_w] = (
+                cv2.resize(image, (resized_w, resized_h)))
+        else:
+            input_img = cv2.resize(image, (self.input_width, self.input_height))
+        if self.rgb_input:
+            input_img = cv2.cvtColor(input_img, cv2.COLOR_BGR2RGB)
         input_img = input_img / 255.0
         input_img = input_img.transpose(2, 0, 1)
         input_tensor = input_img[np.newaxis].astype(np.float32)
@@ -100,6 +134,21 @@ class OnnxSegmentor:
 
     def inference(self, input_tensor):
         return self.session.run(self.output_names, {self.input_names[0]: input_tensor})
+
+    def decode_boxes(self, boxes, img_h, img_w):
+        transform = self._letterbox_transform(img_h, img_w)
+        if transform is None:
+            boxes = self.rescale_boxes(
+                boxes, (self.input_height, self.input_width), (img_h, img_w))
+            boxes = xywh2xyxy(boxes)
+        else:
+            ratio, pad_x, pad_y = transform
+            boxes = xywh2xyxy(boxes)
+            boxes[:, [0, 2]] = (boxes[:, [0, 2]] - pad_x) / ratio
+            boxes[:, [1, 3]] = (boxes[:, [1, 3]] - pad_y) / ratio
+        boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img_w)
+        boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, img_h)
+        return boxes
 
     def process_box_output(self, box_output, img_h, img_w):
         preds = np.squeeze(box_output).T
@@ -118,14 +167,7 @@ class OnnxSegmentor:
         boxes = preds[:, :4]
         mask_preds = preds[:, 4 + num_classes:]
 
-        boxes = self.rescale_boxes(
-            boxes,
-            (self.input_height, self.input_width),
-            (img_h, img_w)
-        )
-        boxes = xywh2xyxy(boxes)
-        boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img_w)
-        boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, img_h)
+        boxes = self.decode_boxes(boxes, img_h, img_w)
 
         indices = nms(boxes, scores, self.iou_threshold)
 
@@ -148,14 +190,7 @@ class OnnxSegmentor:
         boxes = preds[:, :4]
         mask_preds = preds[:, 4 + num_classes:]
 
-        boxes = self.rescale_boxes(
-            boxes,
-            (self.input_height, self.input_width),
-            (img_h, img_w)
-        )
-        boxes = xywh2xyxy(boxes)
-        boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img_w)
-        boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, img_h)
+        boxes = self.decode_boxes(boxes, img_h, img_w)
 
         indices = nms(boxes, scores, iou_threshold)
 
@@ -165,17 +200,26 @@ class OnnxSegmentor:
         if len(mask_preds) == 0:
             return []
 
+        if self.mask_decode == "native":
+            return self.process_mask_native(mask_preds, mask_output, boxes, img_h, img_w)
+
         mask_output = np.squeeze(mask_output)
         num_mask, mh, mw = mask_output.shape
 
         masks = sigmoid(mask_preds @ mask_output.reshape(num_mask, -1))
         masks = masks.reshape(-1, mh, mw)
 
-        scale_boxes = self.rescale_boxes(
-            boxes,
-            (img_h, img_w),
-            (mh, mw)
-        )
+        transform = self._letterbox_transform(img_h, img_w)
+        if transform is None:
+            scale_boxes = self.rescale_boxes(
+                boxes, (img_h, img_w), (mh, mw))
+        else:
+            ratio, pad_x, pad_y = transform
+            scale_boxes = boxes.copy()
+            scale_boxes[:, [0, 2]] = (
+                scale_boxes[:, [0, 2]] * ratio + pad_x) * mw / self.input_width
+            scale_boxes[:, [1, 3]] = (
+                scale_boxes[:, [1, 3]] * ratio + pad_y) * mh / self.input_height
 
         final_masks = np.zeros((len(scale_boxes), img_h, img_w), dtype=np.uint8)
 
@@ -184,7 +228,7 @@ class OnnxSegmentor:
             x1, y1, x2, y2 = boxes[i].astype(int)
 
             crop = masks[i][sy1:sy2, sx1:sx2]
-            if crop.size == 0:
+            if crop.size == 0 or x2 <= x1 or y2 <= y1:
                 continue
 
             crop = cv2.resize(crop, (x2 - x1, y2 - y1))
@@ -193,6 +237,35 @@ class OnnxSegmentor:
             final_masks[i, y1:y2, x1:x2] = crop
 
         return final_masks
+
+    def process_mask_native(self, mask_preds, mask_output, boxes, img_h, img_w):
+        """Resize full logits before box cropping; preserve thin edge geometry.
+
+        Matches the training library's native mask path without requiring torch.
+        The legacy path remains the default for existing production weights.
+        """
+        prototype = np.squeeze(mask_output, axis=0) if mask_output.ndim == 4 else mask_output
+        channels, mh, mw = prototype.shape
+        logits = (mask_preds @ prototype.reshape(channels, -1)).reshape(-1, mh, mw)
+        if self.preprocess_mode == "letterbox":
+            gain = min(mh / img_h, mw / img_w)
+            pad_w = (mw - img_w * gain) / 2
+            pad_h = (mh - img_h * gain) / 2
+            left, top = int(round(pad_w - .1)), int(round(pad_h - .1))
+            right = mw - int(round(pad_w + .1))
+            bottom = mh - int(round(pad_h + .1))
+            logits = logits[:, top:bottom, left:right]
+        result = np.zeros((len(boxes), img_h, img_w), dtype=np.uint8)
+        for index, (plane, box) in enumerate(zip(logits, boxes)):
+            # Integer pixel coordinates satisfy x >= floating x1, x < x2.
+            x1, y1, x2, y2 = np.ceil(box).astype(int)
+            x1, x2 = np.clip([x1, x2], 0, img_w)
+            y1, y2 = np.clip([y1, y2], 0, img_h)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            scaled = cv2.resize(plane, (img_w, img_h), interpolation=cv2.INTER_LINEAR)
+            result[index, y1:y2, x1:x2] = (scaled[y1:y2, x1:x2] > 0).astype(np.uint8)
+        return result
 
     def segment_objects(self, image):
         input_tensor, img_h, img_w = self.prepare_input(image)
@@ -245,12 +318,25 @@ class OnnxSegmentor:
             full = np.maximum(full, m)
         return full
 
+    def paste_tile_mask(self, full_mask, tile_mask, x1, x2, tile_index):
+        """Use overlap as context only in core mode; retain legacy max by default."""
+        if self.tile_merge == "core":
+            width = full_mask.shape[1]
+            step = width // self.num_splits
+            start = max(x1, tile_index * step)
+            end = min(x2, width if tile_index == self.num_splits - 1
+                      else (tile_index + 1) * step)
+            if end > start:
+                full_mask[:, start:end] = tile_mask[:, start-x1:end-x1]
+        else:
+            full_mask[:, x1:x2] = np.maximum(full_mask[:, x1:x2], tile_mask)
+
     def segment_large_image(self, image):
         H, W = image.shape[:2]
         crops, positions = self.split_image(image)
         full_image_mask = np.zeros((H, W), dtype=np.uint8)
 
-        for crop, (x1, x2) in zip(crops, positions):
+        for tile_index, (crop, (x1, x2)) in enumerate(zip(crops, positions)):
             _, _, _, masks = self.segment_objects(crop)
             if len(masks) == 0:
                 continue
@@ -260,9 +346,7 @@ class OnnxSegmentor:
                 merged, (x2 - x1, H), interpolation=cv2.INTER_NEAREST
             ) * 255
 
-            full_image_mask[:, x1:x2] = np.maximum(
-                full_image_mask[:, x1:x2], merged
-            )
+            self.paste_tile_mask(full_image_mask, merged, x1, x2, tile_index)
 
         return full_image_mask, None
 
@@ -271,7 +355,7 @@ class OnnxSegmentor:
         crops, positions = self.split_image(image)
         full_image_mask = np.zeros((H, W), dtype=np.uint8)
 
-        for crop, (x1, x2) in zip(crops, positions):
+        for tile_index, (crop, (x1, x2)) in enumerate(zip(crops, positions)):
             _, _, _, masks = self.segment_objects_debug(crop, conf_threshold, iou_threshold)
             if len(masks) == 0:
                 continue
@@ -281,9 +365,7 @@ class OnnxSegmentor:
                 merged, (x2 - x1, H), interpolation=cv2.INTER_NEAREST
             ) * 255
 
-            full_image_mask[:, x1:x2] = np.maximum(
-                full_image_mask[:, x1:x2], merged
-            )
+            self.paste_tile_mask(full_image_mask, merged, x1, x2, tile_index)
 
         return full_image_mask, None
 
