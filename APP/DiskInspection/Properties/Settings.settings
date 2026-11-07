@@ -113,5 +113,11 @@
     <Setting Name="EndpointOffOkSignal" Type="System.String" Scope="User">
       <Value Profile="(Default)">off_ok_signal</Value>
     </Setting>
+    <Setting Name="OriginJpegQuality" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">90</Value>
+    </Setting>
+    <Setting Name="ResultJpegQuality" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">90</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

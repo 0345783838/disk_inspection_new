@@ -1,5 +1,7 @@
 # Temporary factory-test deployment — 2026-10-01
 
+> Historical deployment. Current primary model: [24 October native hard](SEGMENTOR_MAIN_20261024.md).
+
 This records the earlier segmentation-only trial. The subsequent
 [detector update](POINT_DETECTOR_DEPLOY_20261001.md) supersedes its old detector settings.
 

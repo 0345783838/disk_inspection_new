@@ -1,5 +1,11 @@
 # UV rim counter config — 2026-10-12
 
+Update 23 October 2026: local source production/debug now select rim tracking with
+`UV_USE_RIM_TRACKING = True` (also the default when absent). The active service
+config supplies the `UV_RIM_*` snapshot. See `UV_DEFAULT_RIM_20261023.md` for the
+implementation, replay and installed-executable limitation. The notes below
+describe the original October 12 offline-only state.
+
 Edit the `UV_RIM_*` block in `SERVICE/config/config.env`. All13 user-facing rim
 parameters, including white-core saturation/value limits, now load from this file.
 The values initially match the October6 prototype exactly. Existing `UV_DISK_*`

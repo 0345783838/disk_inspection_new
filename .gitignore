@@ -1,5 +1,7 @@
 # Local backups and editor state
 .work/
+# One active local classifier dataset (images, labels and provenance)
+/DATASET_CLASSIFIER/
 .vs/
 .idea/
 *.suo

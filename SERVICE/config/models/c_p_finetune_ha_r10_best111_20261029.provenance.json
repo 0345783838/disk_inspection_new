@@ -1,0 +1,9 @@
+{
+  "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.pt",
+  "sha256": "51e002c68b4c64b64fd74d8f0987c6df987b4fc3eec7a779bb6464cc516be252",
+  "classes": 3,
+  "architecture": "yolo11n-cls",
+  "source_run": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\classifier_finetune_ha_7030_20261022",
+  "best_epoch": 111,
+  "source": "User-retained HA fine-tune; historical labels and split unchanged"
+}

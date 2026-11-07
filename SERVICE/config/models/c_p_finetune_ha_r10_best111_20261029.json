@@ -1,0 +1,28 @@
+{
+  "saved_at": "2026-10-29T07:42:17.836123+00:00",
+  "model": "YOLO11n-cls",
+  "source_run": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\classifier_finetune_ha_7030_20261022",
+  "canonical_revision": 10,
+  "epochs": 211,
+  "best_epoch": 111,
+  "validation": {
+    "count": 1605,
+    "errors": 15,
+    "missed_ng": 7,
+    "false_ng": 2,
+    "no_disk_as_ok": 0
+  },
+  "files": {
+    "pt": {
+      "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.pt",
+      "sha256": "51e002c68b4c64b64fd74d8f0987c6df987b4fc3eec7a779bb6464cc516be252"
+    },
+    "onnx": {
+      "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.onnx",
+      "sha256": "775872fc29f8e00ab9934747cfaa543ad966e2e905d5e53740717d4114b8363c"
+    }
+  },
+  "installed_as_active": false,
+  "runtime_config_changed": false,
+  "reason": "User requested retaining the fine-tune for later use; no deployment authorization implied."
+}

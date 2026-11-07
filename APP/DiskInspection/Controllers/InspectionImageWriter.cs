@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
+using DiskInspection.Models;
 
 namespace DiskInspection.Controllers
 {
@@ -10,15 +11,18 @@ namespace DiskInspection.Controllers
     {
         private readonly object _gate = new object();
         private Task _pending = Task.CompletedTask;
-        private readonly Func<BitmapSource, string, DateTime, string, bool> _save;
+        private readonly Func<BitmapSource, string, DateTime, string, ImageSaveOptions, bool> _save;
 
-        public InspectionImageWriter(Func<BitmapSource, string, DateTime, string, bool> save = null)
+        public InspectionImageWriter(Func<BitmapSource, string, DateTime, string, ImageSaveOptions, bool> save = null)
         {
             _save = save ?? ImageSaver.SaveImage;
         }
 
-        public void Enqueue(string path, DateTime timestamp, IReadOnlyDictionary<string, BitmapSource> images)
+        public void Enqueue(string path, DateTime timestamp, IReadOnlyDictionary<string, BitmapSource> images,
+            ImageSaveOptions options = null)
         {
+            if (images.Count == 0) return;
+            var saveOptions = options ?? ImageSaveOptions.Default;
             var snapshot = new Dictionary<string, BitmapSource>();
             foreach (var image in images) snapshot.Add(image.Key, image.Value);
             lock (_gate)
@@ -30,7 +34,7 @@ namespace DiskInspection.Controllers
                         bool success = true;
                         foreach (var image in snapshot)
                         {
-                            try { success = _save(image.Value, path, timestamp, image.Key) && success; }
+                            try { success = _save(image.Value, path, timestamp, image.Key, saveOptions) && success; }
                             catch (Exception ex)
                             {
                                 success = false;

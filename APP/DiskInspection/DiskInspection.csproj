@@ -202,8 +202,10 @@
     <Compile Include="Controllers\InspectionSequence.cs" />
     <Compile Include="Controllers\InspectionImageWriter.cs" />
     <Compile Include="Controllers\PLC\PlcController.cs" />
+    <Compile Include="Controllers\PLC\PlcTriggerReset.cs" />
     <Compile Include="Models\DebugUvImageResponse.cs" />
     <Compile Include="Models\EnvironmentConfig.cs" />
+    <Compile Include="Models\ImageSaveOptions.cs" />
     <Compile Include="Models\DebugImageResponse.cs" />
     <Compile Include="Models\ImageDebugInfo.cs" />
     <Compile Include="Models\ImageList.cs" />

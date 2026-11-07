@@ -55,6 +55,52 @@ def fit_projective_x(indexes, xs, count, pitch):
     return predicted,inliers
 
 
+def filter_off_grid_extras(rows, count=25):
+    """Remove only unambiguous off-grid extras using two complete reference rows.
+
+    A detection close to an occupied slot is ambiguous and is never silently
+    discarded. Short rows remain the responsibility of complete_slot_rows.
+    """
+    rows = [np.asarray(row, dtype=np.float32).copy() for row in rows]
+    if len(rows) != 3 or count != 25:
+        return tuple(rows), []
+    overfull = [i for i, row in enumerate(rows) if len(row) > count]
+    if not overfull:
+        return tuple(rows), []
+    references = [i for i, row in enumerate(rows) if len(row) == count]
+    if len(overfull) != 1 or len(references) != 2:
+        raise ValueError('Extra points require two complete reference rows')
+    rows = [row[np.argsort(centers(row)[:, 0])] for row in rows]
+    for i in references:
+        validate_complete(rows[i], count)
+    target = overfull[0]
+    row = rows[target]
+    if len(row) > count + 5:
+        raise ValueError('Too many extra point detections')
+    ref_a, ref_b = [centers(rows[i]) for i in references]
+    actual = centers(row)
+    ya, yb, y = (float(np.median(points[:, 1])) for points in (ref_a, ref_b, actual))
+    if yb <= ya:
+        raise ValueError('Invalid reference row order')
+    expected_x = ref_a[:, 0] + (ref_b[:, 0] - ref_a[:, 0]) * ((y - ya) / (yb - ya))
+    pitch = float(np.median(np.diff(expected_x)))
+    if pitch <= 0:
+        raise ValueError('Invalid reference pitch')
+    indexes = np.argmin(np.abs(actual[:, 0, None] - expected_x[None, :]), axis=1)
+    supported = np.abs(actual[:, 0] - expected_x[indexes]) <= .30 * pitch
+    if supported.sum() != count or len(np.unique(indexes[supported])) != count:
+        raise ValueError('Ambiguous extra point detections')
+    selected = row[supported]
+    validate_complete(selected, count)
+    _, inliers = fit_projective_x(indexes[supported], actual[supported, 0], count, pitch)
+    if not inliers.all():
+        raise ValueError('Unreliable point grid after removing extras')
+    rows[target] = selected
+    removed = [{'row': target + 1, 'box': box.tolist(), 'reason': 'outside_reference_slot_grid'}
+               for box in row[~supported]]
+    return tuple(rows), removed
+
+
 def complete_slot_rows(rows, image_shape, count=25):
     if count != 25 or len(rows) != 3:
         raise ValueError('Only the calibrated three-row / 25-slot tray is supported')

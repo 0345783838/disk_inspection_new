@@ -19,10 +19,12 @@
     </Reference>
     <Compile Include="FlowTests.cs" />
     <Compile Include="..\DiskInspection\Controllers\InspectionSequence.cs" />
+    <Compile Include="..\DiskInspection\Controllers\PLC\PlcTriggerReset.cs" />
     <Compile Include="..\DiskInspection\Controllers\InspectionImageWriter.cs" />
     <Compile Include="..\DiskInspection\Controllers\Camera\CameraFrameNormalizer.cs" />
     <Compile Include="..\DiskInspection\Controllers\ImageSaver.cs" />
     <Compile Include="..\DiskInspection\Models\EnvironmentConfig.cs" />
+    <Compile Include="..\DiskInspection\Models\ImageSaveOptions.cs" />
     <Compile Include="..\DiskInspection\Utils\EnvReader.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

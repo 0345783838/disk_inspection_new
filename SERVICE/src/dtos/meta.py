@@ -24,6 +24,11 @@ class DataResponseUv(BaseModel):
     ErrorDesc: Optional[str] = None  # ["Khay đĩa OK", "Khay đĩa bất thường",...]
     CountUvDisk: int = 0
     ResImg: Optional[str] = None  # base64 result encoded image
+    UvAlgorithm: Optional[str] = None
+    UvCounts: List[int] = Field(default_factory=list)  # raw count in each band, even on PASS
+    WhiteCounts: List[int] = Field(default_factory=list)
+    UvUncertainCounts: List[int] = Field(default_factory=list)
+    UvRequiresReview: bool = False
 
 
 class DataDebugResponse(BaseModel):
@@ -47,6 +52,11 @@ class DataDebugUVResponse(BaseModel):
     CountUvDisk: int = 0
     ThresholdImg: Optional[str] = None  # base64 result encoded image
     FinalImg: Optional[str] = None  # base64 result encoded image
+    UvAlgorithm: Optional[str] = None
+    UvCounts: List[int] = Field(default_factory=list)
+    WhiteCounts: List[int] = Field(default_factory=list)
+    UvUncertainCounts: List[int] = Field(default_factory=list)
+    UvRequiresReview: bool = False
 
 
 class ErrorCode:

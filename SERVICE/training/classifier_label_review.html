@@ -9,7 +9,7 @@
 <p class="help">Confidence dưới đây luôn là điểm của <b>nhãn model ban đầu</b>, không phải điểm của nhãn mày sửa. Mặc định thấp → cao. Ảnh crop giữ kích thước gốc; crop mặt trên đã xoay 180° như luồng chạy. Bấm ảnh để xem vùng lân cận. Nhãn sửa được lưu riêng, chưa train.</p>
 <div id="summary">Đang tải…</div><div id="message" role="status"></div>
 <div id="filters">
-<label>Lớp model <select id="label"><option value="">Tất cả</option><option>ng</option><option>no_disk</option><option>ok</option></select></label>
+<label>Lớp model <select id="label"><option value="">Tất cả</option><option value="ok_no_disk">OK / no_disk</option><option>ng</option><option>no_disk</option><option>ok</option></select></label>
 <label>Trạng thái <select id="status"><option value="unreviewed">Chưa rà soát</option><option value="">Tất cả</option><option value="confirmed">Đã chốt nhãn</option><option value="uncertain">Chưa rõ</option><option value="exclude">Loại bỏ</option></select></label>
 <label>Camera <select id="camera"><option value="">Cả hai</option><option value="1">Cam1</option><option value="2">Cam2</option></select></label>
 <label>Score ≤ <select id="limit"><option value="1">1.00 (tất cả)</option><option value="0.5">0.50</option><option value="0.7">0.70</option><option value="0.9">0.90</option><option value="0.95">0.95</option><option value="0.99">0.99</option></select></label>
@@ -25,18 +25,24 @@
 const $=id=>document.getElementById(id), labels=['ok','ng','no_disk'], options=[['ok','ok — 1 đĩa'],['ng','ng — >1 đĩa'],['no_disk','no_disk — 0 đĩa'],['uncertain','Chưa rõ'],['exclude','Loại ảnh'],['unreviewed','Bỏ xác nhận']];
 let payload,state,digest,filtered=[],page=0,busy=false,current=null;
 const pageSize=48;
+const correctionsOnly=document.body.dataset.reviewMode==='corrections_only';
+if(correctionsOnly){$('acceptPage').hidden=true;$('status').value='';$('status').querySelector('[value="unreviewed"]').textContent='Theo model (chưa sửa)';$('status').querySelector('[value="confirmed"]').textContent='Đã lưu nhãn riêng';options.find(o=>o[0]==='unreviewed')[1]='Khôi phục nhãn model';}
 function message(s,error=false){$('message').textContent=s;$('message').className=error?'error':'';}
 function decision(i){return state.decisions[i.id]?.label||'unreviewed';}
+function effectiveLabel(i){const d=decision(i);return d==='unreviewed'?i.proposed_label:d;}
 function visible(){return filtered.slice(page*pageSize,(page+1)*pageSize);}
+function syncUrl(){const q=new URLSearchParams();for(const id of ['label','status','camera','limit','sort','search'])q.set(id,$(id).value);if(correctionsOnly)q.set('mode','corrections');history.replaceState(null,'','?'+q.toString());}
 function render(){
  const counts={unreviewed:0,confirmed:0,uncertain:0,exclude:0};
  for(const i of payload.items){const d=decision(i);counts[labels.includes(d)?'confirmed':d]++;}
  $('summary').textContent=`${payload.items.length} crop | Model: ${Object.entries(payload.class_counts).map(([k,v])=>k+' '+v).join(' / ')} | Đã chốt ${counts.confirmed}; chưa rà ${counts.unreviewed}; chưa rõ ${counts.uncertain}; loại ${counts.exclude}.`;
+ if(correctionsOnly)$('summary').textContent=`${payload.items.length} crop | Đang dùng nhãn model: ${counts.unreviewed}; đã lưu nhãn riêng: ${counts.confirmed}; chưa rõ: ${counts.uncertain}; loại: ${counts.exclude}. Chỉ cần sửa ảnh sai.`;
  const search=$('search').value.toLowerCase();
- filtered=payload.items.filter(i=>{const d=decision(i),s=$('status').value;return (!$('label').value||i.proposed_label===$('label').value)&&(!$('camera').value||i.camera===Number($('camera').value))&&i.confidence<=Number($('limit').value)&&(!search||i.id.toLowerCase().includes(search))&&(!s||(s==='confirmed'?labels.includes(d):d===s));});
+ filtered=payload.items.filter(i=>{const d=decision(i),s=$('status').value,l=$('label').value;return (!l||(l==='ok_no_disk'?['ok','no_disk'].includes(i.proposed_label):i.proposed_label===l))&&(!$('camera').value||i.camera===Number($('camera').value))&&i.confidence<=Number($('limit').value)&&(!search||i.id.toLowerCase().includes(search))&&(!s||(s==='confirmed'?labels.includes(d):d===s));});
  filtered.sort((a,b)=>$('sort').value==='frame'?a.id.localeCompare(b.id):(a.confidence-b.confidence)*($('sort').value==='desc'?-1:1)||a.id.localeCompare(b.id));
  page=Math.min(page,Math.max(0,Math.ceil(filtered.length/pageSize)-1));
  $('page').textContent=`Trang ${page+1}/${Math.max(1,Math.ceil(filtered.length/pageSize))} · ${filtered.length} ảnh theo bộ lọc`;
+ syncUrl();
  $('prev').disabled=busy||page===0;$('next').disabled=busy||(page+1)*pageSize>=filtered.length;
  $('acceptPage').disabled=busy||!visible().some(i=>decision(i)==='unreviewed');
  $('grid').replaceChildren();
@@ -45,10 +51,10 @@ function render(){
   const img=document.createElement('img');img.src=i.image;img.className='photo';img.loading='lazy';img.alt=i.id;img.onclick=()=>openDetail(i);
   const score=document.createElement('div');score.className='score';score.textContent=`${i.proposed_label} · ${i.confidence.toFixed(6)}`;
   const name=document.createElement('div');name.className='muted';name.textContent=`${i.frame}\n${i.region} · rãnh ${i.slot} · ${i.shape[1]}×${i.shape[0]}`;name.style.whiteSpace='pre-line';
-  const select=document.createElement('select');select.setAttribute('aria-label','Nhãn chuẩn '+i.id);const empty=new Option('Chưa rà soát','unreviewed');select.add(empty);
+  const select=document.createElement('select');select.setAttribute('aria-label','Nhãn chuẩn '+i.id);const empty=new Option(correctionsOnly?'Khôi phục nhãn model':'Chưa rà soát','unreviewed');select.add(empty);
   for(const [v,t] of options.filter(o=>o[0]!=='unreviewed'))select.add(new Option(t,v));
-  select.value=decision(i);select.disabled=busy;select.onchange=()=>save([{id:i.id,label:select.value,notes:state.decisions[i.id]?.notes||''}]);
-  card.append(img,score,name,select);$('grid').append(card);
+  select.value=correctionsOnly?effectiveLabel(i):decision(i);select.disabled=busy;select.onchange=()=>save([{id:i.id,label:select.value,notes:state.decisions[i.id]?.notes||''}]);
+  card.append(img,score,name,select);if(correctionsOnly){const source=document.createElement('p');source.className='muted';source.textContent=decision(i)==='unreviewed'?'Nhãn mặc định từ model':'Đã lưu nhãn riêng';card.append(source);}$('grid').append(card);
  }
 }
 async function save(values){
@@ -57,7 +63,7 @@ async function save(values){
  catch(e){message('Lỗi lưu: '+e.message,true);return false;}
  finally{busy=false;render();$('detailActions').querySelectorAll('button').forEach(b=>b.disabled=false);}
 }
-function openDetail(i){current=i;$('detailTitle').textContent=`${i.frame} / ${i.region} / rãnh ${i.slot}`;$('detailScore').textContent=`Model: ${i.proposed_label} (${i.confidence.toFixed(6)}); scores: ${Object.entries(i.probabilities).map(([k,v])=>k+'='+v.toFixed(6)).join(' / ')}. Nhãn người rà: ${decision(i)}.`;$('crop').src=i.image;$('nativeLink').href=i.image;$('context').src=i.context;$('full').href=i.full_context;$('notes').value=state.decisions[i.id]?.notes||'';$('detailActions').replaceChildren();
+function openDetail(i){current=i;$('detailTitle').textContent=`${i.frame} / ${i.region} / rãnh ${i.slot}`;$('detailScore').textContent=`Model: ${i.proposed_label} (${i.confidence.toFixed(6)}); scores: ${Object.entries(i.probabilities).map(([k,v])=>k+'='+v.toFixed(6)).join(' / ')}. Nhãn hiện tại: ${effectiveLabel(i)} (${decision(i)==='unreviewed'?'theo model':'đã lưu riêng'}).`;$('crop').src=i.image;$('nativeLink').href=i.image;$('context').src=i.context;$('full').href=i.full_context;$('notes').value=state.decisions[i.id]?.notes||'';$('detailActions').replaceChildren();
  for(const [v,t] of options){const b=document.createElement('button');b.textContent=t;b.onclick=()=>labelDetail(v);$('detailActions').append(b);}if(!$('detail').open)$('detail').showModal();
 }
 async function labelDetail(label){if(!current||busy)return;const at=filtered.findIndex(i=>i.id===current.id);const next=filtered[at+1];const ok=await save([{id:current.id,label,notes:$('notes').value}]);if(ok){if(next)openDetail(next);else $('detail').close();}}
@@ -66,5 +72,5 @@ for(const id of ['label','status','camera','limit','sort','search'])$(id).addEve
 $('prev').onclick=()=>{page--;render();};$('next').onclick=()=>{page++;render();};$('close').onclick=()=>{if(!busy)$('detail').close();};$('detailPrev').onclick=()=>moveDetail(-1);$('detailNext').onclick=()=>moveDetail(1);
 $('acceptPage').onclick=async()=>{const candidates=visible().filter(i=>decision(i)==='unreviewed');if(confirm(`Mày đã xem và xác nhận nhãn model của ${candidates.length} ảnh chưa rà trên TRANG NÀY là đúng? Không áp dụng cho trang khác.`))await save(candidates.map(i=>({id:i.id,label:i.proposed_label,notes:''})));};
 document.addEventListener('keydown',e=>{if(!$('detail').open||busy||['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;const key={'1':'ok','2':'ng','3':'no_disk','u':'uncertain','x':'exclude'}[e.key.toLowerCase()];if(key){e.preventDefault();labelDetail(key);}else if(e.key==='ArrowRight')moveDetail(1);else if(e.key==='ArrowLeft')moveDetail(-1);});
-(async()=>{try{const response=await fetch('items.json',{cache:'no-store'});if(!response.ok)throw Error('Không đọc được items.json');const bytes=await response.arrayBuffer();payload=JSON.parse(new TextDecoder().decode(bytes));digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');const res=await fetch('/api/state',{cache:'no-store'});if(!res.ok)throw Error('Hãy mở bằng review server, không mở file trực tiếp');state=await res.json();if(state.items_sha256!==digest)throw Error('Sai bộ dữ liệu');render();message('Nhãn sửa sẽ được lưu tự động khi chọn. Chưa train.');}catch(e){message(e.message,true);}})();
+(async()=>{try{const response=await fetch('items.json',{cache:'no-store'});if(!response.ok)throw Error('Không đọc được items.json');const bytes=await response.arrayBuffer();payload=JSON.parse(new TextDecoder().decode(bytes));digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');const res=await fetch('/api/state',{cache:'no-store'});if(!res.ok)throw Error('Hãy mở bằng review server, không mở file trực tiếp');state=await res.json();if(state.items_sha256!==digest)throw Error('Sai bộ dữ liệu');const q=new URLSearchParams(location.search);for(const id of ['label','status','camera','limit','sort','search'])if(q.has(id)){const value=q.get(id);if($(id).tagName==='INPUT'||Array.from($(id).options).some(o=>o.value===value))$(id).value=value;}if(correctionsOnly&&q.get('status')==='unreviewed'&&!q.has('mode'))$('status').value='';render();message(correctionsOnly?'Mặc định dùng nhãn model. Chỉ sửa ảnh sai; thay đổi được lưu tự động. Training đang dừng.':'Nhãn sửa sẽ được lưu tự động khi chọn. Chưa train.');}catch(e){message(e.message,true);}})();
 </script></body></html>

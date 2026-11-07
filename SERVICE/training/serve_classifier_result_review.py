@@ -169,6 +169,9 @@ def main():
     parser.add_argument('--evaluation', type=Path, required=True)
     parser.add_argument('--port', type=int, default=8777)
     args = parser.parse_args()
+    registry = Path(__file__).resolve().parents[2] / '.work/ACTIVE_CLASSIFIER_DATASET.json'
+    if registry.exists():
+        raise RuntimeError('Use the canonical dataset editor at http://127.0.0.1:8791/; standalone decisions-only editors are retired.')
     root = args.evaluation.resolve()
     digest, items, report = review_payload(root)
     ResultReviewHandler.output_dir = root

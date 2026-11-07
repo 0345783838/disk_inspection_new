@@ -483,7 +483,7 @@ namespace DiskInspection.Views.DebugWindows
                     resSaveConfig = UpdateEnvConfig();
                     AIServiceController.CloseProcessExisting();
                     AIServiceController.Start();
-                    var timeout = 5000;
+                    var timeout = 20000;
                     var timeStep = timeout / 1000;
                     
                     for (int i = 0; i < timeStep; i++)

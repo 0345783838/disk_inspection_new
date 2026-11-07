@@ -66,6 +66,8 @@ namespace DiskInspection.Views.SettingsWindows
             tbUvLightOffDelay.Text = _param.WaitUvLightOff.ToString();
 
             // Saving Settings
+            InitImageSaveOptions(cbbOriginQuality, _param.OriginJpegQuality);
+            InitImageSaveOptions(cbbResultQuality, _param.ResultJpegQuality);
             if (_param.SaveEnable == true)
             {
                 cbSaveEnable.IsChecked = true;
@@ -97,6 +99,22 @@ namespace DiskInspection.Views.SettingsWindows
                 rbSaveNG.IsChecked = false;
                 rbSaveBoth.IsChecked = false;
             }
+        }
+
+        private static void InitImageSaveOptions(ComboBox quality, int jpegQuality)
+        {
+            quality.ItemsSource = new[]
+            {
+                new KeyValuePair<int, string>(0, "PNG (Lossless)"),
+                new KeyValuePair<int, string>(100, "JPEG 100"),
+                new KeyValuePair<int, string>(95, "JPEG 95"),
+                new KeyValuePair<int, string>(90, "JPEG 90 (Default)"),
+                new KeyValuePair<int, string>(75, "JPEG 75"),
+                new KeyValuePair<int, string>(50, "JPEG 50")
+            };
+            var options = new ImageSaveOptions(jpegQuality);
+            quality.SelectedValue = options.JpegQuality;
+            if (quality.SelectedIndex < 0) quality.SelectedValue = 90;
         }
 
         private void NumberValidationTextBox(object sender, TextCompositionEventArgs e)
@@ -234,6 +252,9 @@ namespace DiskInspection.Views.SettingsWindows
                 _param.SaveMode = 1;
                 _param.SaveOption = 1;
             }
+            // Preserve these preferences even when image saving is temporarily disabled.
+            _param.OriginJpegQuality = (int)cbbOriginQuality.SelectedValue;
+            _param.ResultJpegQuality = (int)cbbResultQuality.SelectedValue;
             _param.Save();
         }
 

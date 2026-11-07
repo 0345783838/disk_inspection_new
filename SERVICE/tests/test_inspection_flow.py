@@ -230,6 +230,21 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.classify_batch_calls,0)
         self.assertTrue(result.PointGeometryStatus.startswith('rejected:'))
 
+    def test_off_grid_extra_point_keeps_white_and_debug_geometry_usable(self):
+        self.service.point_slot_completion = True
+        self.service.point_slot_count = 25
+        extra = self.rows[1][-1].copy()
+        extra[[0, 2]] += 18
+        self.boxes = np.vstack((*self.rows, extra))
+        prod = self.service.check_disk_white(self.image.copy())
+        debug = self.service.check_disk_debug(self.image.copy(), self.service._default_white_params())
+        self.assertEqual(prod.Result, 0)
+        self.assertEqual(prod.ErrorCode, 'PASS')
+        self.assertEqual(prod.PointGeometryStatus, 'filtered: 1 off-grid detection(s)')
+        self.assertTrue(prod.CropBox)
+        self.assertEqual(prod.CropBox, debug.CropBox)
+        self.assertEqual(prod.ResImg, debug.FinalImg)
+
     def test_debug_uses_requested_disk_count(self):
         params = self.service._default_white_params()
         self.assertEqual(self.service.check_disk_debug(self.image.copy(), params).Result, 0)
@@ -237,6 +252,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.service.check_disk_debug(self.image.copy(), params).Result, 1)
 
     def test_uv_debug_and_production_agree_for_empty_homogeneous_and_mixed(self):
+        self.service.uv_use_rim_tracking = False  # explicitly retain legacy coverage
         crop = str([[0, 0], [400, 0], [400, 100], [0, 100]])
         top = str([[0, 10], [400, 10], [400, 40], [0, 40]])
         bottom = str([[0, 50], [400, 50], [400, 80], [0, 80]])

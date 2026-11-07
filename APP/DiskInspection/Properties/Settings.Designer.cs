@@ -466,5 +466,21 @@ namespace DiskInspection.Properties {
                 this["EndpointOffOkSignal"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("90")]
+        public int OriginJpegQuality {
+            get { return ((int)(this["OriginJpegQuality"])); }
+            set { this["OriginJpegQuality"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("90")]
+        public int ResultJpegQuality {
+            get { return ((int)(this["ResultJpegQuality"])); }
+            set { this["ResultJpegQuality"] = value; }
+        }
     }
 }

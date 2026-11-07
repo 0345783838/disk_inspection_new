@@ -5,9 +5,14 @@ import numpy as np
 from src.dtos.meta import DataResponse, ErrorCode, DataDebugResponse, DataResponseUv, DataDebugUVResponse, \
     InspectionState, ClassifyResult, Params
 from src.service.base_service import BaseService
-from src.tools.slot_geometry import complete_slot_rows
+from src.tools.slot_geometry import complete_slot_rows, filter_off_grid_extras
 import base64
 import ast
+import logging
+from src.tools.uv_rim_counter import count_uv_rims
+
+
+logger = logging.getLogger(__name__)
 
 
 class DiskCheckingService(BaseService):
@@ -832,10 +837,13 @@ class DiskCheckingService(BaseService):
 
         # Group point detections into the three physical rows.
         inferred_slots = []
+        discarded_points = []
         try:
             boxes_l1, boxes_l2, boxes_l3 = self.split_rows(
                 boxes, expected_rows=expected_rows, expected_points_per_row=slot_count)
             if complete_slots:
+                (boxes_l1, boxes_l2, boxes_l3), discarded_points = filter_off_grid_extras(
+                    (boxes_l1, boxes_l2, boxes_l3), slot_count)
                 (boxes_l1, boxes_l2, boxes_l3), inferred_slots = complete_slot_rows(
                     (boxes_l1, boxes_l2, boxes_l3), image.shape, slot_count)
         except ValueError as ex:
@@ -843,7 +851,12 @@ class DiskCheckingService(BaseService):
         if any(len(row) < slot_count for row in (boxes_l1, boxes_l2, boxes_l3)):
             return self._white_failure(image, debug)
         geometry_status = 'completed' if inferred_slots else 'detected'
+        if discarded_points:
+            geometry_status = 'filtered: ' + str(len(discarded_points)) + ' off-grid detection(s)'
         if debug:
+            for item in discarded_points:
+                box = np.array(item['box']).reshape(2, 2).mean(axis=0).astype(int)
+                cv2.drawMarker(detect_image, tuple(box), (0, 0, 255), cv2.MARKER_TILTED_CROSS, 25, 3)
             for item in inferred_slots:
                 x1,y1,x2,y2 = map(int,item['box'])
                 cv2.rectangle(detect_image,(x1,y1),(x2,y2),(0,215,255),2)
@@ -1038,6 +1051,30 @@ class DiskCheckingService(BaseService):
                               self.uv_disk_lower_threshold, self.uv_disk_upper_threshold,
                               self.uv_min_disk_area)
 
+    def _measure_uv_band(self, image, band, white_mids, lower, upper, min_area):
+        if getattr(self, 'uv_use_rim_tracking', True):
+            result, images = count_uv_rims(
+                image, band, getattr(self, 'uv_rim_settings', None))
+            return (images['overlay'], images['kept_mask'], result['count'],
+                    result['uncertain_count'], result['requires_review'])
+
+        mask = self.preprocess_uv_image_hsv(image, lower=tuple(lower), upper=tuple(upper))
+        mask = self.remove_mask_noise_uv(mask, min_disk_area=min_area)
+        center = (image.shape[1] // 2, image.shape[0] // 2)
+        if band == 1:
+            params = dict(length_rate=.95, max_edge_distance=50,
+                          min_edge_distance=5, thickness_list=[1, 3])
+        else:
+            params = dict(length_rate=self.caliper.length_rate,
+                          max_edge_distance=self.caliper.pair_max_gap,
+                          min_edge_distance=self.caliper.min_edge_distance,
+                          thickness_list=self.caliper.thickness_list)
+        measured = self.get_caliper_result_debug(mask, center=center, **params)
+        rendered = self.draw_uv_mask(image, mask)
+        rendered, uv_mids = self.visualize_edge_spacing_uv(rendered, center, measured)
+        self.draw_uv_index(rendered, uv_mids, white_mids)
+        return rendered, mask, len(measured['pairs']), 0, False
+
     def _check_uv(self, img, crop_box, uv_box_1, uv_box_2, mid_1, mid_2,
                   lower, upper, min_area, debug=False):
         crop_box = np.array(ast.literal_eval(crop_box), dtype=np.float32)
@@ -1058,48 +1095,16 @@ class DiskCheckingService(BaseService):
         if uv_crop_1.size == 0 or uv_crop_2.size == 0:
             raise ValueError("Empty UV region")
 
-        uv_thresh_1 = self.preprocess_uv_image_hsv(uv_crop_1, lower=tuple(lower), upper=tuple(upper))
-        uv_thresh_2 = self.preprocess_uv_image_hsv(uv_crop_2, lower=tuple(lower), upper=tuple(upper))
-
-        uv_thresh_1 = self.remove_mask_noise_uv(uv_thresh_1, min_disk_area=min_area)
-        uv_thresh_2 = self.remove_mask_noise_uv(uv_thresh_2, min_disk_area=min_area)
-
-        caliper_res_1 = self.get_caliper_result_debug(uv_thresh_1,
-                                                      center=(uv_crop_1.shape[1] // 2, uv_crop_1.shape[0] // 2),
-                                                      length_rate=0.95,
-                                                      max_edge_distance=50,
-                                                      min_edge_distance=5,
-                                                      thickness_list=[1, 3])
-
-        caliper_res_2 = self.get_caliper_result_debug(uv_thresh_2,
-                                                      center=(uv_crop_2.shape[1] // 2, uv_crop_2.shape[0] // 2),
-                                                      length_rate=self.caliper.length_rate,
-                                                      max_edge_distance=self.caliper.pair_max_gap,
-                                                      min_edge_distance=self.caliper.min_edge_distance,
-                                                      thickness_list=self.caliper.thickness_list
-                                                      )
-
-        uv_crop_1 = self.draw_uv_mask(uv_crop_1, uv_thresh_1)
-        uv_crop_2 = self.draw_uv_mask(uv_crop_2, uv_thresh_2)
-
-        result_1, mid_uv_1 = self.visualize_edge_spacing_uv(uv_crop_1,
-                                                            (uv_crop_1.shape[1] // 2, uv_crop_1.shape[0] // 2),
-                                                            caliper_res_1)
-        result_2, mid_uv_2 = self.visualize_edge_spacing_uv(uv_crop_2,
-                                                            (uv_crop_2.shape[1] // 2, uv_crop_2.shape[0] // 2),
-                                                            caliper_res_2)
-
-        self.draw_uv_index(uv_crop_1, mid_uv_1, mid_1)
-        self.draw_uv_index(uv_crop_2, mid_uv_2, mid_2)
+        result_1, uv_thresh_1, count_uv_disk_1, uncertain_1, review_1 = self._measure_uv_band(
+            uv_crop_1, 1, mid_1, lower, upper, min_area)
+        result_2, uv_thresh_2, count_uv_disk_2, uncertain_2, review_2 = self._measure_uv_band(
+            uv_crop_2, 2, mid_2, lower, upper, min_area)
 
         # Draw segment on crop image
         mask_crop = crop_img.copy()
         # mask_crop = np.zeros((crop_img.shape[0], crop_img.shape[1], 3), dtype=np.uint8)
         mask_crop[uv_box_1[0][1]:uv_box_1[2][1], uv_box_1[0][0]:uv_box_1[2][0]] = result_1
         mask_crop[uv_box_2[0][1]:uv_box_2[2][1], uv_box_2[0][0]:uv_box_2[2][0]] = result_2
-
-        count_uv_disk_1 = len(caliper_res_1["pairs"])
-        count_uv_disk_2 = len(caliper_res_2["pairs"])
 
         count_white_disk_1 = len(mid_1)
         count_white_disk_2 = len(mid_2)
@@ -1110,6 +1115,22 @@ class DiskCheckingService(BaseService):
         line_2_ok = count_uv_disk_2 == count_white_disk_2
 
         passed = count_uv_disk == 0 or (line_1_ok and line_2_ok)
+        algorithm = 'rim_tracking' if getattr(self, 'uv_use_rim_tracking', True) else 'hsv_caliper'
+        diagnostics = dict(UvAlgorithm=algorithm,
+                           UvCounts=[count_uv_disk_1, count_uv_disk_2],
+                           WhiteCounts=[count_white_disk_1, count_white_disk_2],
+                           UvUncertainCounts=[uncertain_1, uncertain_2],
+                           UvRequiresReview=bool(review_1 or review_2))
+        logger.info('UV algorithm=%s raw=%s white=%s uncertain=%s passed=%s',
+                    algorithm, diagnostics['UvCounts'], diagnostics['WhiteCounts'],
+                    diagnostics['UvUncertainCounts'], passed)
+        if algorithm == 'rim_tracking':
+            for band, box in enumerate((uv_box_1, uv_box_2)):
+                text = (f"RIM UV {diagnostics['UvCounts'][band]} / WHITE {diagnostics['WhiteCounts'][band]}"
+                        f"  ? {diagnostics['UvUncertainCounts'][band]}")
+                x, y = int(box[0, 0]) + 10, max(25, int(box[0, 1]) - 10)
+                cv2.putText(mask_crop, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+                            .8, (0, 255, 255), 2)
         # Existing production UI reports zero for an accepted homogeneous tray.
         reported_count = 0 if passed else count_uv_disk
         if debug:
@@ -1117,10 +1138,12 @@ class DiskCheckingService(BaseService):
             threshold_image[uv_box_1[0][1]:uv_box_1[2][1], uv_box_1[0][0]:uv_box_1[2][0]] = uv_thresh_1
             threshold_image[uv_box_2[0][1]:uv_box_2[2][1], uv_box_2[0][0]:uv_box_2[2][0]] = uv_thresh_2
             return DataDebugUVResponse(Result=passed, CountUvDisk=reported_count,
+                                       **diagnostics,
                                        ThresholdImg=self._convert_2_base64(threshold_image),
                                        FinalImg=self._convert_2_base64(mask_crop))
         error = ErrorCode.PASS if passed else ErrorCode.ERR_MIXING_DISK
         return DataResponseUv(Result=passed, CountUvDisk=reported_count,
+                              **diagnostics,
                               ErrorCode=error[0], ErrorDesc=error[1],
                               ResImg=self._convert_2_base64(mask_crop))
 

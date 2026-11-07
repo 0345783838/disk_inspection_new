@@ -1,0 +1,64 @@
+{
+  "selected_at": "2026-11-04T14:13:28.984244+07:00",
+  "purpose": "User explicitly selected original HA fine-tune best111 for field evaluation, favoring fewer false NG",
+  "user_statement": "thế không được rồi, vẫn ưu tiển bản checkpoint best 111 đi",
+  "classifier_name": "YOLO11n-cls original HA fine-tune best111",
+  "classifier_source": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.onnx",
+  "source_run": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\classifier_finetune_ha_7030_20261022",
+  "models": {
+    "classifier": {
+      "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p.onnx",
+      "sha256": "775872fc29f8e00ab9934747cfaa543ad966e2e905d5e53740717d4114b8363c"
+    },
+    "detector": {
+      "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\d_p_ha_20260930.onnx",
+      "sha256": "b04223c1ce295416e4c7e6f7bf6342499be7b87a81689ac8ceee06e19c413bbe"
+    },
+    "segmenter": {
+      "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\s_p_edge_white_native_hard_20261024_102450.onnx",
+      "sha256": "133945894b62f6dd9bc46baf80070947c4854dd488e64b181c28d035e8ead2c0"
+    }
+  },
+  "labels": [
+    "ng",
+    "no_disk",
+    "ok"
+  ],
+  "input_size": [
+    224,
+    224
+  ],
+  "rollback_backup": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\field_test_best111_20261104\\backup",
+  "original_validation_1605": {
+    "errors": 15,
+    "missed_ng": 7,
+    "false_ng": 2,
+    "empty_as_ok": 0
+  },
+  "current_validation_1615": {
+    "errors": 4,
+    "missed_ng": 3,
+    "false_ng": 0,
+    "empty_as_ok": 0
+  },
+  "validation_is_reused_development": true,
+  "prior_recommendation_gates_passed": false,
+  "user_authorized_field_test": true,
+  "activation_receipt": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\field_test_best111_20261104\\verification.json",
+  "previous_classifier": {
+    "name": "fine-tune +AI checkpoint42",
+    "sha256": "89a7ef199e575cdb77a7bcc8edb0d1250affa41bb9f804cadbdc24b1fbccc434",
+    "backup": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\field_test_best111_20261104\\backup\\c_p_checkpoint42.onnx"
+  },
+  "retained_alternates": [
+    {
+      "name": "Original HA fine-tune best111",
+      "onnx": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.onnx",
+      "onnx_sha256": "775872fc29f8e00ab9934747cfaa543ad966e2e905d5e53740717d4114b8363c",
+      "pt": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.pt",
+      "pt_sha256": "51e002c68b4c64b64fd74d8f0987c6df987b4fc3eec7a779bb6464cc516be252",
+      "active": true,
+      "reason": "Keep the original best111 four-file source. Active c_p.onnx is now byte-identical to this ONNX."
+    }
+  ]
+}

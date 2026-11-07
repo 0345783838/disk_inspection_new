@@ -26,7 +26,7 @@ namespace DiskInspection.Controllers.Camera
         }
         public LincolnCamera GetCamera1()
         {
-            if (((_camera1 != null) && (_camera1.SN != Properties.Settings.Default.Cam1Sn)) || (_camera1 == null))
+            if (_camera1 == null || _camera1.SN != Properties.Settings.Default.Cam1Sn || !_camera1.IsOpen())
             {
                 if (_camera1 != null)
                     _camera1.Close();
@@ -36,7 +36,7 @@ namespace DiskInspection.Controllers.Camera
         }
         public LincolnCamera GetCamera1(string sn)
         {
-            if (((_camera1 != null) && (_camera1.SN != sn)) || (_camera1 == null))
+            if (_camera1 == null || _camera1.SN != sn || !_camera1.IsOpen())
             {
                 if (_camera1 != null)
                     _camera1.Close();
@@ -47,7 +47,7 @@ namespace DiskInspection.Controllers.Camera
 
         public LincolnCamera GetCamera2() 
         {
-            if (((_camera2 != null) && (_camera2.SN != Properties.Settings.Default.Cam2Sn)) || (_camera2 == null))
+            if (_camera2 == null || _camera2.SN != Properties.Settings.Default.Cam2Sn || !_camera2.IsOpen())
             {
                 if (_camera2 != null)
                     _camera2.Close();
@@ -57,7 +57,7 @@ namespace DiskInspection.Controllers.Camera
         }
         public LincolnCamera GetCamera2(string sn)
         {
-            if (((_camera2 != null) && (_camera2.SN != sn)) || (_camera2 == null))
+            if (_camera2 == null || _camera2.SN != sn || !_camera2.IsOpen())
             {
                 if (_camera2 != null)
                     _camera2.Close();

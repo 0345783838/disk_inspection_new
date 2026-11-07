@@ -7,6 +7,7 @@ from src.inference.yolo_detect.onnx_detector import OnnxDetector
 import decouple
 
 from src.tools.caliper_advanced_new import AdvancedMultiEdgeCaliper
+from src.tools.uv_rim_counter import load_rim_settings
 
 # Load config here!!!
 config = decouple.config
@@ -75,6 +76,8 @@ MIN_DISK_AREA = config('MIN_DISK_AREA', cast=float)
 UV_DISK_LOWER_THRESHOLD = config('UV_DISK_LOWER_THRESHOLD', cast=lambda v: tuple(int(s.strip()) for s in v.split(',')))
 UV_DISK_UPPER_THRESHOLD = config('UV_DISK_UPPER_THRESHOLD', cast=lambda v: tuple(int(s.strip()) for s in v.split(',')))
 UV_MIN_DISK_AREA = config('UV_MIN_DISK_AREA', cast=float)
+UV_USE_RIM_TRACKING = config('UV_USE_RIM_TRACKING', default=True, cast=bool)
+UV_RIM_SETTINGS = load_rim_settings(config=config) if UV_USE_RIM_TRACKING else None
 
 
 # Initialize the models
@@ -147,6 +150,8 @@ class BaseService:
             self.uv_disk_lower_threshold = uv_disk_lower_threshold
             self.uv_disk_upper_threshold = uv_disk_upper_threshold
             self.uv_min_disk_area = uv_min_disk_area
+            self.uv_use_rim_tracking = UV_USE_RIM_TRACKING
+            self.uv_rim_settings = UV_RIM_SETTINGS
 
             self.plc_controller = plc_controller
 

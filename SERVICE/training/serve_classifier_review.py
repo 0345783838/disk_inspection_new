@@ -102,6 +102,9 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--port', type=int, default=8776)
     args = parser.parse_args()
+    registry = Path(__file__).resolve().parents[2] / '.work/ACTIVE_CLASSIFIER_DATASET.json'
+    if registry.exists():
+        raise RuntimeError('Use the single canonical dataset editor at http://127.0.0.1:8791/; old decisions-only editors are retired.')
     output = args.output.resolve()
     payload_path = output/'items.json'
     payload = json.loads(payload_path.read_text(encoding='utf-8'))

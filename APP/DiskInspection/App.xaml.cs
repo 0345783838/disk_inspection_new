@@ -20,6 +20,9 @@ namespace DiskInspection
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // plugin/config/license/user.ini paths belong to this application,
+            // including when a shortcut supplies a different working directory.
+            System.IO.Directory.SetCurrentDirectory(AppDomain.CurrentDomain.BaseDirectory);
             base.OnStartup(e);
 
             ImageViewer = new ImageViewerWindow();

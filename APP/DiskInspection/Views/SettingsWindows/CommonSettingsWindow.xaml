@@ -8,7 +8,8 @@
     xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
     Title="Settings"
     Width="549"
-    Height="640"
+    Height="760"
+    MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
     Icon="/Resources/Icons/settings.png"
     ResizeMode="NoResize"
     Style="{DynamicResource WindowStyle}"
@@ -36,11 +37,49 @@
                 <Setter Property="Margin" Value="0,5,0,0" />
                 <Setter Property="Orientation" Value="Horizontal" />
             </Style>
+            <Style x:Key="originSavePanel" TargetType="StackPanel" BasedOn="{StaticResource stPanel}">
+                <Setter Property="IsEnabled" Value="False" />
+                <Style.Triggers>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsChecked, ElementName=cbSaveEnable}" Value="True" />
+                            <Condition Binding="{Binding IsChecked, ElementName=rbSaveOptionOrigin}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="IsEnabled" Value="True" />
+                    </MultiDataTrigger>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsChecked, ElementName=cbSaveEnable}" Value="True" />
+                            <Condition Binding="{Binding IsChecked, ElementName=rbSaveOptionResultOrigin}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="IsEnabled" Value="True" />
+                    </MultiDataTrigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="resultSavePanel" TargetType="StackPanel" BasedOn="{StaticResource stPanel}">
+                <Setter Property="IsEnabled" Value="False" />
+                <Style.Triggers>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsChecked, ElementName=cbSaveEnable}" Value="True" />
+                            <Condition Binding="{Binding IsChecked, ElementName=rbSaveOptionResult}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="IsEnabled" Value="True" />
+                    </MultiDataTrigger>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsChecked, ElementName=cbSaveEnable}" Value="True" />
+                            <Condition Binding="{Binding IsChecked, ElementName=rbSaveOptionResultOrigin}" Value="True" />
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="IsEnabled" Value="True" />
+                    </MultiDataTrigger>
+                </Style.Triggers>
+            </Style>
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="321" />
-            <RowDefinition Height="230" />
-            <RowDefinition />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="50" />
         </Grid.RowDefinitions>
         <GroupBox
             Grid.Row="0"
@@ -250,12 +289,17 @@
             BorderThickness="2"
             Header="Image Saving Settings">
             <Grid>
-                <Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid MinHeight="349">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="1*" />
-                        <RowDefinition Height="1*" />
-                        <RowDefinition Height="1*" />
-                        <RowDefinition Height="1*" />
+                        <RowDefinition Height="40" />
+                        <RowDefinition Height="44" />
+                        <RowDefinition Height="64" />
+                        <RowDefinition Height="24" />
+                        <RowDefinition Height="42" />
+                        <RowDefinition Height="42" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="44" />
                     </Grid.RowDefinitions>
                     <StackPanel
                         Grid.Row="0"
@@ -365,6 +409,29 @@
                     </StackPanel>
                     <StackPanel
                         Grid.Row="3"
+                        Margin="160,0,0,0" Orientation="Horizontal" VerticalAlignment="Bottom">
+                        <TextBlock Width="310" Text="Định dạng / chất lượng nén" FontSize="12" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="4"
+                        Style="{StaticResource originSavePanel}">
+                        <Label Width="145" Content="Origin (Raw):" Style="{StaticResource labelName}" />
+                        <ComboBox x:Name="cbbOriginQuality" Width="310" Height="28"
+                                  DisplayMemberPath="Value" SelectedValuePath="Key"
+                                  VerticalContentAlignment="Center" ToolTip="Origin file format / compression quality" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="5"
+                        Style="{StaticResource resultSavePanel}">
+                        <Label Width="145" Content="Result:" Style="{StaticResource labelName}" />
+                        <ComboBox x:Name="cbbResultQuality" Width="310" Height="28"
+                                  DisplayMemberPath="Value" SelectedValuePath="Key"
+                                  VerticalContentAlignment="Center" ToolTip="Result file format / compression quality" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="6" Margin="20,4,15,4" FontSize="12" TextWrapping="Wrap"
+                               Text="Kích thước luôn giữ nguyên 100%. PNG không mất dữ liệu; mức JPEG càng thấp, chất lượng và dung lượng càng giảm." />
+                    <StackPanel
+                        Grid.Row="7"
                         Margin="0,0,0,0"
                         Style="{StaticResource stPanel}">
                         <Label
@@ -390,6 +457,7 @@
                             Style="{StaticResource labelName}" />
                     </StackPanel>
                 </Grid>
+                </ScrollViewer>
             </Grid>
         </GroupBox>
         <StackPanel

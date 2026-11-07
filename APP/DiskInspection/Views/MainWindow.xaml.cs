@@ -99,9 +99,9 @@ namespace DiskInspection
                 userType == UserType.Worker ||
                 userType == UserType.Engineer)
             {
-                var window = new CommonSettingsWindow();
+                var window = new CommonSettingsWindow { Owner = this };
                 _mainController.MarkHardwareMayBeActive();
-                window.Show();
+                window.ShowDialog();
             }
         }
 
@@ -112,9 +112,9 @@ namespace DiskInspection
                 userType == UserType.Worker ||
                 userType == UserType.Engineer)
             {
-                var debugWindow = new DebugWindow();
+                var debugWindow = new DebugWindow { Owner = this };
                 _mainController.MarkHardwareMayBeActive();
-                debugWindow.Show();
+                debugWindow.ShowDialog();
             }
         }
 
@@ -279,9 +279,9 @@ namespace DiskInspection
             }
         }
 
-        internal void SetLoadingService(string content)
+        internal void SetLoadingService(string content, int timeoutMs)
         {
-            var timeout = 10000;
+            var timeout = timeoutMs;
             new Thread(() =>
             {
                 this.Dispatcher.Invoke(new Action(() =>

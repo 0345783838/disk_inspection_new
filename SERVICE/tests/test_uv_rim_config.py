@@ -43,6 +43,15 @@ class UvRimConfigTests(unittest.TestCase):
         self.write_config({'strong_value': 120})
         self.assertEqual(load_rim_settings(self.path).strong_value, 120)
 
+    def test_service_uses_its_active_config_instead_of_source_file(self):
+        from decouple import Config, RepositoryEnv
+        self.write_config({'strong_value': 125, 'hue_high': 140})
+        actual = load_rim_settings(config=Config(RepositoryEnv(str(self.path))))
+        self.assertEqual(actual.strong_value, 125)
+        self.assertEqual(actual.hue_high, 140)
+        with self.assertRaisesRegex(ValueError, 'either config_path or config'):
+            load_rim_settings(self.path, config=Config(RepositoryEnv(str(self.path))))
+
     def test_config_is_reloaded_after_edit(self):
         self.write_config({'strong_value': 120})
         self.assertEqual(load_rim_settings(self.path).strong_value, 120)

@@ -1,4 +1,4 @@
-"""Experimental UV-only rim tracking. Not connected to the production service.
+"""UV-only rim tracking, selected by UV_USE_RIM_TRACKING in the service.
 
 Blue HSV halos admit adjacent low-saturation bright cores. A fan-shaped warp
 aligns the long primary rims; reversed/short reflected arcs do not align.
@@ -50,15 +50,20 @@ class RimSettings:
             raise ValueError('UV_RIM_MIN_SEPARATION must be an integer >= 1')
 
 
-def load_rim_settings(config_path=None):
+def load_rim_settings(config_path=None, *, config=None):
     """Read a fresh config snapshot without modifying global decouple.config.
 
     Environment overrides follow python-decouple. Missing keys retain original
     defaults; a missing file or malformed value fails explicitly.
     """
     from decouple import Config, RepositoryEnv
-    path = Path(config_path) if config_path is not None else Path(__file__).resolve().parents[2] / 'config' / 'config.env'
-    config = Config(RepositoryEnv(str(path)))
+    if config is not None and config_path is not None:
+        raise ValueError('Specify either config_path or config, not both')
+    if config is None:
+        path = Path(config_path) if config_path is not None else Path(__file__).resolve().parents[2] / 'config' / 'config.env'
+        config = Config(RepositoryEnv(str(path)))
+    else:
+        path = 'active service config'
     defaults = RimSettings()
     values = {}
     for field in fields(defaults):

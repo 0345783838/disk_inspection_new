@@ -87,17 +87,17 @@ namespace DiskInspection.Controllers
         public bool StartAIService(int timeoutMs, string loadingMessage)
         {
             ServiceIsRunning = false;
-            _mainWindow.SetLoadingService(loadingMessage);
+            _mainWindow.SetLoadingService(loadingMessage, timeoutMs + 1000);
             _logger.Info("Starting AI service...");
             AppLogger.Instance.Info("Loading Program...", "SYSTEM");
 
             AIServiceController.CloseProcessExisting();
             AIServiceController.Start();
 
-            int steps = timeoutMs / 1000;
-            for (int i = 0; i < steps; i++)
+            var startupTime = Stopwatch.StartNew();
+            while (startupTime.ElapsedMilliseconds < timeoutMs)
             {
-                Thread.Sleep(1000);
+                Thread.Sleep((int)Math.Min(500, Math.Max(1, timeoutMs - startupTime.ElapsedMilliseconds)));
                 if (APICommunication.CheckAPIStatus(_param.ApiUrlAi, 200))
                 {
                     _logger.Info("AI service started successfully.");
@@ -276,8 +276,8 @@ namespace DiskInspection.Controllers
         private async Task RunInspectionCycleAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            if (!PlcController.ResetTrigger(_param.ApiUrlCom, 1000))
-                throw new InvalidOperationException("Cannot reset PLC trigger.");
+            await PlcTriggerReset.RunAsync(
+                () => PlcController.ResetTrigger(_param.ApiUrlCom, 1000), token).ConfigureAwait(false);
 
             _mainWindow.UpdateInspectingMode();
             App.ImageViewer.ClearImages();
@@ -761,26 +761,28 @@ namespace DiskInspection.Controllers
             var option = (SaveOption)_param.SaveOption;
             bool passed = status == InspectionResult.Passed;
             if ((option == SaveOption.OK && !passed) || (option == SaveOption.NG && passed)) return;
-            var images = new Dictionary<string, BitmapSource>();
+            var origins = new Dictionary<string, BitmapSource>();
+            var results = new Dictionary<string, BitmapSource>();
             var mode = (SaveType)_param.SaveMode;
             lock (_cam1Lock)
             lock (_cam2Lock)
             {
                 if (mode != SaveType.RESULT)
                 {
-                    Add("Cam1_White_Raw", _cam1WhiteRaw); Add("Cam2_White_Raw", _cam2WhiteRaw);
-                    Add("Cam1_White_Normalized", _cam1WhiteOrigin); Add("Cam2_White_Normalized", _cam2WhiteOrigin);
-                    Add("Cam1_UV_Raw", _cam1UvRaw); Add("Cam2_UV_Raw", _cam2UvRaw);
-                    Add("Cam1_UV_Normalized", _cam1UvOrigin); Add("Cam2_UV_Normalized", _cam2UvOrigin);
+                    Add(origins, "Cam1_White_Raw", _cam1WhiteRaw); Add(origins, "Cam2_White_Raw", _cam2WhiteRaw);
+                    Add(origins, "Cam1_UV_Raw", _cam1UvRaw); Add(origins, "Cam2_UV_Raw", _cam2UvRaw);
                 }
                 if (mode != SaveType.ORIGINAL)
                 {
-                    Add("Cam1_White_Result", _cam1WhiteResult); Add("Cam2_White_Result", _cam2WhiteResult);
-                    Add("Cam1_UV_Result", _cam1UvResult); Add("Cam2_UV_Result", _cam2UvResult);
+                    Add(results, "Cam1_White_Result", _cam1WhiteResult); Add(results, "Cam2_White_Result", _cam2WhiteResult);
+                    Add(results, "Cam1_UV_Result", _cam1UvResult); Add(results, "Cam2_UV_Result", _cam2UvResult);
                 }
             }
-            _imageWriter.Enqueue(_param.SavePath, timestamp, images);
-            void Add(string name, BitmapSource image)
+            var originOptions = new ImageSaveOptions(_param.OriginJpegQuality);
+            var resultOptions = new ImageSaveOptions(_param.ResultJpegQuality);
+            _imageWriter.Enqueue(_param.SavePath, timestamp, origins, originOptions);
+            _imageWriter.Enqueue(_param.SavePath, timestamp, results, resultOptions);
+            void Add(Dictionary<string, BitmapSource> images, string name, BitmapSource image)
             {
                 if (image != null) images.Add(name, image);
             }
