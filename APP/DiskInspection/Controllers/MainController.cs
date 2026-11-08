@@ -277,7 +277,7 @@ namespace DiskInspection.Controllers
         {
             token.ThrowIfCancellationRequested();
             await PlcTriggerReset.RunAsync(
-                () => PlcController.ResetTrigger(_param.ApiUrlCom, 1000), token).ConfigureAwait(false);
+                () => PlcController.ResetTrigger(_param.ApiUrlCom, 1000), token).ConfigureAwait(true);
 
             _mainWindow.UpdateInspectingMode();
             App.ImageViewer.ClearImages();
@@ -377,8 +377,8 @@ namespace DiskInspection.Controllers
 
             var tasks = new[]
             {
-                Task.Run(() => _camera1.TriggerAndGetFrame()),
-                Task.Run(() => _camera2.TriggerAndGetFrame())
+                Task.Run(() => _camera1.TriggerAndGetFrame(timeoutMs:3000)),
+                Task.Run(() => _camera2.TriggerAndGetFrame(timeoutMs:3000))
             };
             try
             {

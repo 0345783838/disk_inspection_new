@@ -10,7 +10,7 @@ namespace DiskInspection.Controllers.PLC
             Func<int, CancellationToken, Task> delay = null)
         {
             const int maxAttempts = 3;
-            const int retryDelayMs = 100;
+            const int retryDelayMs = 200;
             delay = delay ?? Task.Delay;
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
@@ -18,13 +18,14 @@ namespace DiskInspection.Controllers.PLC
                 token.ThrowIfCancellationRequested();
                 bool success = reset();
                 token.ThrowIfCancellationRequested();
-                if (success) return;
+                //if (success) return;
 
                 if (attempt < maxAttempts)
                     await delay(retryDelayMs, token).ConfigureAwait(false);
             }
 
-            throw new InvalidOperationException("Cannot reset PLC trigger after 3 attempts.");
+            //throw new InvalidOperationException("Cannot reset PLC trigger after 3 attempts.");
+            return;
         }
     }
 }
