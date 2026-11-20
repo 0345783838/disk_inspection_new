@@ -1,22 +1,22 @@
 {
-  "selected_at": "2026-11-04T14:13:28.984244+07:00",
-  "purpose": "User explicitly selected original HA fine-tune best111 for field evaluation, favoring fewer false NG",
-  "user_statement": "thế không được rồi, vẫn ưu tiển bản checkpoint best 111 đi",
-  "classifier_name": "YOLO11n-cls original HA fine-tune best111",
-  "classifier_source": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.onnx",
-  "source_run": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\classifier_finetune_ha_7030_20261022",
+  "selected_at": "2026-11-19T09:08:21.286005+07:00",
+  "purpose": "User-selected default classifier for SERVICE",
+  "user_statement": "oke rồi đấy tạm chốt cho tao bản này là bản tốt nhất nhé thay thế luôn bản đang chạy trên service",
+  "classifier_name": "YOLO11n-cls 19_11 bỏ legacy, 200/60, best epoch 17",
+  "classifier_source": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\classifier_no_legacy_200e_20261119\\artifacts\\best.onnx",
+  "source_run": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\classifier_no_legacy_200e_20261119",
   "models": {
     "classifier": {
       "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p.onnx",
-      "sha256": "775872fc29f8e00ab9934747cfaa543ad966e2e905d5e53740717d4114b8363c"
+      "sha256": "79f95f774a9bd4fed783eec3b7d577a5d6d4ec347ec4bb70e4b05997a418b38e"
     },
     "detector": {
       "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\d_p_ha_20260930.onnx",
       "sha256": "b04223c1ce295416e4c7e6f7bf6342499be7b87a81689ac8ceee06e19c413bbe"
     },
     "segmenter": {
-      "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\s_p_edge_white_native_hard_20261024_102450.onnx",
-      "sha256": "133945894b62f6dd9bc46baf80070947c4854dd488e64b181c28d035e8ead2c0"
+      "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\s_p_edge_yolo11n_20261120.onnx",
+      "sha256": "9509091f61fea6f9c21cc7fad2527e5e25c99e53995bb6a9741cfbbc2bb07996"
     }
   },
   "labels": [
@@ -28,27 +28,12 @@
     224,
     224
   ],
-  "rollback_backup": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\field_test_best111_20261104\\backup",
-  "original_validation_1605": {
-    "errors": 15,
-    "missed_ng": 7,
-    "false_ng": 2,
-    "empty_as_ok": 0
-  },
-  "current_validation_1615": {
-    "errors": 4,
-    "missed_ng": 3,
-    "false_ng": 0,
-    "empty_as_ok": 0
-  },
-  "validation_is_reused_development": true,
-  "prior_recommendation_gates_passed": false,
-  "user_authorized_field_test": true,
-  "activation_receipt": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\field_test_best111_20261104\\verification.json",
+  "rollback_backup": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\service_classifier_no_legacy_20261119\\backup",
+  "activation_receipt": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\service_classifier_no_legacy_20261119\\activation.json",
   "previous_classifier": {
-    "name": "fine-tune +AI checkpoint42",
-    "sha256": "89a7ef199e575cdb77a7bcc8edb0d1250affa41bb9f804cadbdc24b1fbccc434",
-    "backup": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\field_test_best111_20261104\\backup\\c_p_checkpoint42.onnx"
+    "name": "Original HA fine-tune best111",
+    "sha256": "775872fc29f8e00ab9934747cfaa543ad966e2e905d5e53740717d4114b8363c",
+    "backup": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\service_classifier_no_legacy_20261119\\backup\\c_p.onnx"
   },
   "retained_alternates": [
     {
@@ -57,8 +42,44 @@
       "onnx_sha256": "775872fc29f8e00ab9934747cfaa543ad966e2e905d5e53740717d4114b8363c",
       "pt": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_finetune_ha_r10_best111_20261029.pt",
       "pt_sha256": "51e002c68b4c64b64fd74d8f0987c6df987b4fc3eec7a779bb6464cc516be252",
-      "active": true,
-      "reason": "Keep the original best111 four-file source. Active c_p.onnx is now byte-identical to this ONNX."
+      "active": false,
+      "reason": "Bản HA best111 trước lần đổi, giữ làm đối chiếu/rollback"
+    },
+    {
+      "name": "Classifier 19_11 có legacy epoch 7",
+      "active": false,
+      "onnx": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_19_11_2026_co_legacy.onnx",
+      "pt": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\c_p_19_11_2026_co_legacy.pt",
+      "onnx_sha256": "56e62f8be6b935ce8815bebec85477a82f989c5a4f869995f4c9c4da13d101f8",
+      "pt_sha256": "4cc0345ec8b0c83f4ffdba86de8bee0912c66f60b445906fb84b9dbdd8ae50bf"
     }
-  ]
+  ],
+  "validation_revision": 228,
+  "validation_6635": {
+    "accuracy": 0.9954785229841748,
+    "errors": 30,
+    "ng_not_detected": 3,
+    "false_ng": 7,
+    "no_disk_as_ok": 13
+  },
+  "validation_is_reused_development": true,
+  "prior_recommendation_gates_passed": false,
+  "user_authorized_field_test": true,
+  "previous_segmenter": {
+    "path": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\SERVICE\\config\\models\\s_p_edge_yolo11s_ep26_20261118.onnx",
+    "sha256": "2f8dff4bb355919a8bf4a0e21df331e40ba24a62a41ffeac5b8e626d529b48e2",
+    "active": false,
+    "checkpoint_epoch": 26
+  },
+  "segmenter_activation": {
+    "selected_at": "2026-11-20T13:27:40.886062+07:00",
+    "model": "YOLO11n-seg",
+    "checkpoint_epoch": 28,
+    "source": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\segmentation_nano_20261120\\artifacts\\s_p_edge_yolo11n_20261120.onnx",
+    "caliper_min_px": 3,
+    "segment_confidence": 0.1,
+    "weak_mask_floor": 0.05,
+    "selective_horizontal_flip": true,
+    "receipt": "D:\\huynhvc\\OTHERS\\4.DISK_INSPECTION\\.work\\service_nano_white_20261120\\activation.json"
+  }
 }

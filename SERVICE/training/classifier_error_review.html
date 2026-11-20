@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rà và sửa nhãn · Lỗi classifier</title>
+<style>
+  :root{color-scheme:dark;font:15px system-ui;background:#101824;color:#ebf1fa}
+  *{box-sizing:border-box}body{margin:0}header,main{padding:18px 24px}
+  header{background:#182437}h1{font-size:23px;margin:4px 0 8px}p{margin:8px 0;line-height:1.5}
+  a{color:#9ad6ff}button,select,input{font:inherit;color:inherit;accent-color:#80d6d0}
+  button,select{background:#263950;border:1px solid #526983;border-radius:6px;padding:7px 10px}
+  button{cursor:pointer}button:disabled,select:disabled{opacity:.55;cursor:default}button.primary{background:#285b64}
+  .tools{position:sticky;top:0;z-index:1;padding:10px 24px;background:#192638;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .muted{color:#b4c4d8}.error{color:#ffb1a6}.saved{color:#9ae3c5}
+  main{display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:14px}
+  article{background:#1b293b;border:1px solid #3b506a;border-radius:8px;overflow:hidden}
+  .photo{width:100%;border:0;border-radius:0;background:#0a111a;padding:8px;display:block}
+  .photo img{display:block;width:100%;height:205px;object-fit:contain;filter:brightness(var(--brightness,1))}
+  .body{padding:11px}.edit{display:flex;gap:8px;margin:9px 0}.edit select{flex:1;min-width:0}
+  dl{display:grid;grid-template-columns:1fr auto;gap:4px 10px;margin:8px 0}dd{margin:0}
+  .id{font-size:12px;overflow-wrap:anywhere}.badge{background:#334961;border-radius:4px;padding:1px 6px}
+  .badge.ng{background:#833e4b}.badge.ok{background:#246248}.badge.no_disk{background:#40568d}
+  .priority{color:#ffd59c}.caseState{min-height:1.3em;font-size:13px}
+  dialog{max-width:94vw;max-height:94vh;background:#172335;border:1px solid #68809e;color:inherit;border-radius:8px}
+  dialog::backdrop{background:#000b}dialog img{display:block;width:min(500px,84vw);height:min(64vh,570px);object-fit:contain;filter:brightness(var(--brightness,1))}
+</style>
+<header>
+  <a href="/">← Báo cáo model</a>
+  <h1>Rà và sửa nhãn các case lỗi</h1>
+  <p>Chọn <b>NG</b>, <b>Trống</b> hoặc <b>OK</b> rồi bấm <b>Lưu nhãn</b> trên từng ảnh.
+  Mày có thể rà ảnh tiếp theo khi nhãn đang lưu.</p>
+</header>
+<div class="tools">
+  <label>Hiển thị <select id="filter">
+    <option value="all">Toàn bộ case</option>
+    <option value="assumed">OK giả định</option>
+    <option value="remaining">Chưa rà sau lượt train</option>
+    <option value="reviewed">Đã rà sau lượt train</option>
+  </select></label>
+  <label>Độ sáng <input id="brightness" type="range" min="1" max="4" step=".25" value="1"></label>
+  <button id="refresh">Tải nhãn hiện tại</button>
+  <span id="summary" class="muted"></span><span id="message" role="status">Đang đọc dữ liệu…</span>
+</div>
+<main id="cards"></main>
+<dialog id="zoom"><form method="dialog"><button>Đóng</button></form><p id="zoomLabel"></p><img id="zoomImage" alt="Crop classifier phóng lớn"></dialog>
+<script>
+const $ = id => document.getElementById(id);
+const names = {ng:'NG', no_disk:'Trống', ok:'OK', uncertain:'Chưa rõ', exclude:'Đã loại'};
+const origins = {factory_20261118:'Tháng 11', new_factory:'Tháng 10', old_ha:'HA', old_legacy_train:'Legacy'};
+const assumed = row => row.source_of_label === 'user_assumed_model_ok';
+let data, saveTimer, refreshing = false;
+const drafts = new Map();
+let queued = new Map(), inFlight = new Map();
+
+function element(tag, text, cls) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (cls) node.className = cls;
+  return node;
+}
+
+function badge(label) {
+  return element('span', names[label] || 'Không còn crop', 'badge ' + (label || ''));
+}
+
+function message(text, style = '') {
+  $('message').textContent = text;
+  $('message').className = style;
+}
+
+function buildCard(row) {
+  const card = element('article');
+  card.dataset.id = row.id;
+  const photo = element('button', undefined, 'photo');
+  photo.setAttribute('aria-label', 'Phóng lớn ' + row.id);
+  const image = element('img');
+  image.alt = 'Crop ' + row.id;
+  image.loading = 'lazy';
+  image.src = '/input_snapshot/' + row.path.split('/').map(encodeURIComponent).join('/');
+  photo.append(image);
+  photo.onclick = () => {
+    $('zoomImage').src = image.src;
+    $('zoomLabel').textContent = row.id;
+    $('zoom').showModal();
+  };
+  const body = element('div', undefined, 'body');
+  const title = (origins[row.origin] || row.origin) + (row.camera ? ' · Cam' + row.camera : '');
+  body.append(element('strong', title));
+  if (assumed(row)) body.append(element('span', ' · OK giả định', 'priority'));
+  const facts = element('dl');
+  function detail(title, label, confidence) {
+    const value = element('dd');
+    value.append(badge(label));
+    if (confidence) value.append(' ' + (100 * Number(confidence)).toFixed(1) + '%');
+    facts.append(element('dt', title), value);
+  }
+  detail('Nhãn lúc đánh giá', row.truth);
+  detail('HA best111', row.best111, row.best111_conf);
+  detail('Model mới', row.learned, row.learned_conf);
+  detail('Nhãn hiện tại', row.current.label);
+  body.append(facts);
+  const edit = element('div', undefined, 'edit');
+  const select = element('select');
+  select.setAttribute('aria-label', 'Sửa nhãn ' + row.id);
+  for (const label of ['ng','no_disk','ok']) select.add(new Option(names[label],label));
+  select.value = drafts.get(row.id) || row.current.label || '';
+  const save = element('button', undefined, 'primary');
+  const pending = queued.has(row.id) || inFlight.has(row.id);
+  const buttonText = () => select.value === row.current.label ? 'Xác nhận nhãn' : 'Lưu nhãn';
+  select.disabled = save.disabled = !row.current.editable || pending || refreshing;
+  save.textContent = pending ? 'Đang lưu…' : buttonText();
+  select.onchange = () => {
+    drafts.set(row.id, select.value);
+    save.textContent = buttonText();
+  };
+  save.onclick = () => {
+    enqueue(row, select.value);
+    select.disabled = save.disabled = true;
+    save.textContent = 'Đang lưu…';
+  };
+  edit.append(select, save);
+  let state = '';
+  if (!row.current.editable) state = 'Crop đã đổi hoặc ra khỏi tập validation';
+  else if (row.current.reviewed_after_run) state = '✓ Đã rà sau lượt train';
+  body.append(edit, element('div', state, 'caseState saved'), element('div', row.id, 'id muted'));
+  card.append(photo, body);
+  return card;
+}
+
+function render() {
+  if (!data) return;
+  const filter = $('filter').value;
+  const cases = data.cases.filter(row => filter === 'all'
+    || (filter === 'assumed' && assumed(row))
+    || (filter === 'remaining' && row.current.editable && !row.current.reviewed_after_run)
+    || (filter === 'reviewed' && row.current.reviewed_after_run));
+  cases.sort((a,b) => Number(assumed(b)) - Number(assumed(a)));
+  $('cards').replaceChildren(...cases.map(buildCard));
+  if (!cases.length) $('cards').append(element('p', 'Không có case trong bộ lọc này.'));
+  $('summary').textContent = cases.length + ' / ' + data.cases.length + ' case · revision hiện tại ' + data.revision;
+}
+
+async function load() {
+  const response = await fetch('/api/error-review', {cache:'no-store'});
+  if (!response.ok) throw new Error('Không tải được nhãn hiện tại.');
+  data = await response.json();
+  render();
+}
+
+function pendingStatus() {
+  const count = queued.size + inFlight.size;
+  $('refresh').disabled = refreshing || count > 0;
+  if (count) message(count + ' case đang chờ lưu…');
+}
+
+function enqueue(row, label) {
+  if (!row.current.editable || refreshing || queued.has(row.id) || inFlight.has(row.id)) return;
+  drafts.set(row.id, label);
+  queued.set(row.id, label);
+  pendingStatus();
+  if (!inFlight.size && !saveTimer) {
+    saveTimer = setTimeout(() => {saveTimer = null; void flush();}, 300);
+  }
+}
+
+async function flush() {
+  if (inFlight.size || !queued.size) return;
+  inFlight = queued;
+  queued = new Map();
+  let result, errorMessage = '';
+  try {
+    const response = await fetch('/api/error-review/label', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        revision:data.revision,
+        changes:Array.from(inFlight, ([id,label]) => ({id,label}))
+      })
+    });
+    result = await response.json();
+    if (!response.ok) {
+      if (response.status === 409) await load();
+      throw new Error(result.error);
+    }
+    data.revision = result.revision;
+    for (const item of data.cases) {
+      if (result.updated[item.id]) item.current = result.updated[item.id];
+    }
+    for (const id of inFlight.keys()) drafts.delete(id);
+  } catch (error) {
+    errorMessage = 'Chưa xác nhận lưu. ' + error.message + ' Lựa chọn vẫn còn trên từng ảnh.';
+    queued.clear();
+  } finally {
+    inFlight.clear();
+    render();
+    pendingStatus();
+  }
+  if (errorMessage) message(errorMessage, 'error');
+  else if (queued.size) void flush();
+  else message('Đã lưu ' + result.saved + ' case · revision ' + result.revision, 'saved');
+}
+
+$('filter').onchange = render;
+$('brightness').oninput = () => document.documentElement.style.setProperty('--brightness',$('brightness').value);
+$('refresh').onclick = async () => {
+  if (refreshing || queued.size || inFlight.size) return;
+  refreshing = true;
+  render();
+  pendingStatus();
+  try {await load(); message('Đã tải nhãn hiện tại.', 'saved');}
+  catch (error) {message(error.message, 'error');}
+  finally {refreshing = false;render();pendingStatus();}
+};
+window.addEventListener('beforeunload', event => {
+  if (queued.size || inFlight.size) {event.preventDefault();event.returnValue = '';}
+});
+load().then(() => message('Sẵn sàng sửa nhãn.')).catch(error => message(error.message,'error'));
+</script>
+</html>

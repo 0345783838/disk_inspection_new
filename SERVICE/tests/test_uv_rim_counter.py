@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 import cv2
 import numpy as np
-from src.tools.uv_rim_counter import count_uv_rims, uv_masks, fan_maps, RimSettings
+from src.tools.uv_rim_counter import count_uv_rims, uv_masks, fan_maps, compare_bright_ridges, RimSettings
 
 
 def image_with_rims(xs, width=320, height=100, thickness=1, value=180):
@@ -33,6 +33,21 @@ class UvRimCounterTests(unittest.TestCase):
     def test_close_distinct_rims_remain_two(self):
         result, _ = count_uv_rims(image_with_rims([80, 86]), 1)
         self.assertEqual(result['count'], 2)
+
+    def test_shared_bright_ridge_can_have_different_sampled_columns(self):
+        value = np.zeros((100, 40), np.uint8)
+        value[:, 12:20] = 220
+        first = np.full(100, 12)
+        second = np.r_[np.full(70, 19), np.full(30, -1)]
+        self.assertEqual(compare_bright_ridges(value, first, second, 12), (True, False))
+        value[56:70, 14:17] = 130
+        self.assertEqual(compare_bright_ridges(value, first, second, 12), (True, True))
+
+    def test_crossing_rims_do_not_share_most_bright_rows(self):
+        value = np.full((100, 40), 210, np.uint8)
+        first = np.r_[np.full(40, 12), np.full(60, -1)]
+        second = np.r_[np.full(30, -1), np.full(70, 19)]
+        self.assertEqual(compare_bright_ridges(value, first, second, 12), (False, False))
 
     def test_neutral_core_requires_blue_halo(self):
         hsv = np.zeros((100, 320, 3), np.uint8)
@@ -95,6 +110,27 @@ class UvRimCounterTests(unittest.TestCase):
         cv2.line(image, (180, 0), (125, 149), (190, 120, 75), 2)
         result, _ = count_uv_rims(image, 1)
         self.assertEqual(result['count'], 3)
+
+    def test_broad_alignment_recovers_rims_from_a_bad_hough_fit(self):
+        for band, slope, tilt, xs in (
+                (1, -.39, -.06, [54, 124, 236, 390, 475, 535]),
+                (2, .42, .05, [375, 448, 515, 558])):
+            with self.subTest(band=band):
+                image = np.zeros((170, 640, 3), np.uint8)
+                mx, _, _, _ = fan_maps(image.shape[:2], slope, tilt, -.06)
+                for x in xs:
+                    points = np.column_stack((mx[:, x], np.arange(len(mx)))).round().astype(np.int32)
+                    cv2.polylines(image, [points], False, (190, 120, 75), 2)
+                with patch('src.tools.uv_rim_counter.estimate_fan',
+                           return_value=(np.sign(slope) * .02, -.06, True)):
+                    result, _ = count_uv_rims(image, band)
+                self.assertEqual(result['count'], len(xs))
+
+    def test_sparse_opposed_outer_arc_does_not_set_the_fan_tilt(self):
+        image = np.zeros((180, 700, 3), np.uint8)
+        cv2.line(image, (565, 0), (587, 179), (190, 120, 75), 2)
+        result, _ = count_uv_rims(image, 1)
+        self.assertEqual(result['count'], 0)
 
 
 if __name__ == '__main__':

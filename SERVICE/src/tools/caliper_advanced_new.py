@@ -224,6 +224,52 @@ class AdvancedMultiEdgeCaliper:
             result["profiles"] = profiles
         return result
 
+    def measure_white_mask(self, mask, center, min_edge_distance,
+                           max_edge_distance, length_rate, thickness_list):
+        result = self.measure_with_params(mask, center, min_edge_distance,
+                                          max_edge_distance, length_rate, thickness_list)
+        width = mask.shape[1]
+        length = int(length_rate * width)
+        padding = min(8, (width - length) // 2)
+        if self.angle_deg != 0 or length < 3 or padding <= 0:
+            return result
+
+        cx, y = center
+        left, right = cx - (length - 1) / 2, cx + (length - 1) / 2
+        left_on = 0 <= left < width and mask[y, math.ceil(left)] != 0
+        right_on = 0 <= right < width and mask[y, math.floor(right)] != 0
+        if (not left_on and not right_on) or len(result['pairs']) >= self.max_pairs:
+            return result
+
+        # An even increase preserves the original sampling grid. Only complete
+        # foreground runs that cross an original endpoint of the scan.
+        expanded_rate = min(1.0, (length + 2 * padding + 0.5) / width)
+        expanded = self.measure_with_params(mask, center, min_edge_distance,
+                                            max_edge_distance, expanded_rate, thickness_list)
+        pairs = list(result['pairs'])
+        edges = {(edge['point'], edge['sign']): edge for edge in result['edges']}
+        for pair in expanded['pairs']:
+            first, last = pair['e1'], pair['e2']
+            start, end = first['point'][0], last['point'][0]
+            if start <= left - padding + 1 or end >= right + padding - 1:
+                continue
+            if first['sign'] != 1 or not ((left_on and start < left < end)
+                                          or (right_on and start < right < end)):
+                continue
+            if any(start <= p['e2']['point'][0] and end >= p['e1']['point'][0] for p in pairs):
+                continue
+            first = {**first, 'index': first['index'] - padding}
+            last = {**last, 'index': last['index'] - padding}
+            pairs.append({**pair, 'e1': first, 'e2': last})
+            for edge in (first, last):
+                edges.setdefault((edge['point'], edge['sign']), edge)
+            if len(pairs) == self.max_pairs:
+                break
+        if len(pairs) == len(result['pairs']):
+            return result
+        return {**result, 'pairs': sorted(pairs, key=lambda p: p['e1']['index']),
+                'edges': sorted(edges.values(), key=lambda e: e['index'])}
+
     def _detect_edges_mask(
             self,
             profile: np.ndarray,

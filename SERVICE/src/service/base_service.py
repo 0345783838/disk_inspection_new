@@ -7,6 +7,7 @@ from src.inference.yolo_detect.onnx_detector import OnnxDetector
 import decouple
 
 from src.tools.caliper_advanced_new import AdvancedMultiEdgeCaliper
+from src.tools.caliper_gap_delta import validate_gap_delta_threshold
 from src.tools.uv_rim_counter import load_rim_settings
 
 # Load config here!!!
@@ -34,6 +35,7 @@ DISK_SEGMENT_PREPROCESS_MODE = config('DISK_SEGMENT_PREPROCESS_MODE', default='s
 DISK_SEGMENT_RGB_INPUT = config('DISK_SEGMENT_RGB_INPUT', cast=bool, default=False)
 DISK_SEGMENT_MASK_DECODE = config('DISK_SEGMENT_MASK_DECODE', default='legacy')
 DISK_SEGMENT_TILE_MERGE = config('DISK_SEGMENT_TILE_MERGE', default='max')
+WHITE_EDGE_RECOVERY_ENABLED = config('WHITE_EDGE_RECOVERY_ENABLED', default=False, cast=bool)
 
 # Detection model
 DISK_POINT_DETECT_MODEL_PATH = config('DISK_POINT_DETECT_MODEL_PATH')
@@ -71,6 +73,8 @@ CALIPER_RETURN_PROFILE = config('CALIPER_RETURN_PROFILE', cast=bool)
 NUM_DISK = config('NUM_DISK', cast=int)
 MAX_DISK_DISTANCE = config('MAX_DISK_DISTANCE', cast=float)
 MIN_DISK_DISTANCE = config('MIN_DISK_DISTANCE', cast=float)
+MAX_CALIPER_GAP_DELTA_PX = validate_gap_delta_threshold(
+    config('MAX_CALIPER_GAP_DELTA_PX', default=20, cast=float))
 MIN_DISK_AREA = config('MIN_DISK_AREA', cast=float)
 
 UV_DISK_LOWER_THRESHOLD = config('UV_DISK_LOWER_THRESHOLD', cast=lambda v: tuple(int(s.strip()) for s in v.split(',')))
@@ -145,6 +149,7 @@ class BaseService:
             self.num_disk = num_disk
             self.max_disk_distance = max_disk_distance
             self.min_disk_distance = min_disk_distance
+            self.max_caliper_gap_delta_px = MAX_CALIPER_GAP_DELTA_PX
             self.min_disk_area = min_disk_area
 
             self.uv_disk_lower_threshold = uv_disk_lower_threshold
@@ -156,5 +161,6 @@ class BaseService:
             self.plc_controller = plc_controller
 
             self.disk_segmentor_yolo = disk_segmentor_yolo
+            self.white_edge_recovery_enabled = WHITE_EDGE_RECOVERY_ENABLED
         else:
             pass

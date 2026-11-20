@@ -99,6 +99,11 @@
                                 Click="btnStart_Click"
                                 Style="{StaticResource btToolBarStyle}"
                                 ToolTip="-Run">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Click="TestOffline_Click" Header="Test offline..." />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
                                 <Image
                                     x:Name="imBtnStart"
                                     Width="50"
@@ -499,6 +504,7 @@
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0">
                     <GroupBox
+                        x:Name="StatisticsPanel"
                         Margin="5"
                         BorderBrush="Gray"
                         BorderThickness="1"
@@ -819,10 +825,14 @@
                         BorderBrush="Gray"
                         BorderThickness="1"
                         Header="Messages">
-                        <ListBox x:Name="LogListBox" ItemsSource="{Binding Logger.Logs}">
+                        <ListBox
+                            x:Name="LogListBox"
+                            HorizontalContentAlignment="Stretch"
+                            ItemsSource="{Binding Logger.Logs}"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock>
+                                    <TextBlock TextWrapping="Wrap">
                                         <Run Foreground="Gray" Text="{Binding TimeText, Mode=OneWay}" />
                                         <Run Text=" [" />
                                         <Run FontWeight="Bold" Text="{Binding Source, Mode=OneWay}" />
@@ -851,6 +861,62 @@
                     </GroupBox>
                 </Grid>
             </Grid>
+        </Grid>
+        <Grid
+            x:Name="InspectionOverlay"
+            Grid.RowSpan="2"
+            Panel.ZIndex="10"
+            Background="#340F172A"
+            IsHitTestVisible="False">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsInspecting}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <Border
+                Width="620"
+                Height="213"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="#FFF9E8"
+                BorderBrush="#BF8A00"
+                BorderThickness="1"
+                CornerRadius="13">
+                <Border.Effect>
+                    <DropShadowEffect
+                        BlurRadius="30"
+                        Color="Black"
+                        Opacity="0.33"
+                        ShadowDepth="8" />
+                </Border.Effect>
+                <Grid>
+                    <Border
+                        Height="8"
+                        VerticalAlignment="Top"
+                        Background="#E6B400"
+                        CornerRadius="12,12,0,0" />
+                    <StackPanel VerticalAlignment="Center" TextElement.FontFamily="Segoe UI">
+                        <TextBlock
+                            FontSize="53"
+                            FontWeight="Bold"
+                            Foreground="#202025"
+                            Text="ĐANG KIỂM TRA"
+                            TextAlignment="Center" />
+                        <TextBlock
+                            Margin="0,10,0,0"
+                            FontSize="26"
+                            FontWeight="SemiBold"
+                            Foreground="#3B3021"
+                            Text="Không chạm hoặc di chuyển đĩa."
+                            TextAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </Window>

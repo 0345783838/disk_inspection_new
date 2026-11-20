@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using RestSharp;
 using System;
+using System.Diagnostics;
 using System.Net;
 
 namespace DiskInspection.Controllers.PLC
@@ -31,8 +32,14 @@ namespace DiskInspection.Controllers.PLC
                 {
                     var request = new RestRequest(endpoint, Method.Get);
                     configure?.Invoke(request);
+                    var elapsed = Stopwatch.StartNew();
                     var response = client.Execute(request);
-                    if (response.StatusCode != HttpStatusCode.OK || response.ErrorException != null) return null;
+                    if (response.StatusCode != HttpStatusCode.OK || response.ErrorException != null)
+                    {
+                        Logger.Debug(response.ErrorException, $"GET {endpoint}: HTTP {(int)response.StatusCode}, " +
+                            $"{response.ResponseStatus}, {elapsed.ElapsedMilliseconds} ms (timeout {timeout} ms).");
+                        return null;
+                    }
                     return JsonConvert.DeserializeObject<T>(response.Content ?? "null");
                 }
             }

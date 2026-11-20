@@ -10,7 +10,7 @@ namespace DiskInspection.Controllers.PLC
             Func<int, CancellationToken, Task> delay = null)
         {
             const int maxAttempts = 3;
-            const int retryDelayMs = 200;
+            const int retryDelayMs = 100;
             delay = delay ?? Task.Delay;
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)

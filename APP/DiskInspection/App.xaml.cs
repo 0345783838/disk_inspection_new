@@ -24,6 +24,7 @@ namespace DiskInspection
             // including when a shortcut supplies a different working directory.
             System.IO.Directory.SetCurrentDirectory(AppDomain.CurrentDomain.BaseDirectory);
             base.OnStartup(e);
+            AppLogger.Instance.Info("Application started.", "SYSTEM");
 
             ImageViewer = new ImageViewerWindow();
             ImageViewer.Hide();   // chạy nền
@@ -34,6 +35,8 @@ namespace DiskInspection
         protected override void OnExit(ExitEventArgs e)
         {
             _imageCleanupService?.Stop();
+            AppLogger.Instance.Info($"Application exiting with code {e.ApplicationExitCode}.", "SYSTEM");
+            NLog.LogManager.Shutdown();
             base.OnExit(e);
         }
     }

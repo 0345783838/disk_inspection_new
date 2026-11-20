@@ -9,7 +9,6 @@ namespace DiskInspection.Controllers
 {
     public class AIServiceController
     {
-        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
         public static void Start()
         {
             try
@@ -29,7 +28,7 @@ namespace DiskInspection.Controllers
             }
             catch (Exception ex)
             {
-                logger.Debug(ex.Message);
+                AppLogger.Instance.Error($"Cannot start AI service: {ex.Message}", "AI", ex);
             }
         }
         public static bool CheckProcessExisting()

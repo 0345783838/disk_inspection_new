@@ -8,6 +8,7 @@ using DiskInspection.Views.SettingsWindows;
 using DiskInspection.Views.UtilitiesWindows;
 using LiveCharts.Wpf;
 using LiveCharts;
+using Microsoft.WindowsAPICodePack.Dialogs;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -21,6 +22,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
@@ -50,13 +52,27 @@ namespace DiskInspection
         public int Cam2Status { get; set; } = (int)(StatusState.Unknown);
         public int InspectionStatusCam1 { get; set; } = (int)(StatusState.Unknown);
         public int InspectionStatusCam2 { get; set; } = (int)(StatusState.Unknown);
-        public int InspectionStatus { get; set; } = (int)(StatusState.Unknown);
+        private int _inspectionStatus = (int)StatusState.Unknown;
+        public int InspectionStatus
+        {
+            get => _inspectionStatus;
+            set
+            {
+                if (_inspectionStatus == value) return;
+                _inspectionStatus = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsInspecting));
+            }
+        }
+        public bool IsInspecting => InspectionStatus == (int)StatusState.Inspecting;
 
         public AppLogger Logger => AppLogger.Instance;
 
         private PieSeries _okSeries;
         private PieSeries _warningSeries;
         private PieSeries _ngSeries;
+        private (int ok, int warning, int ng) _offlineCounts;
+        private bool _showingOfflineStatistics;
         public SeriesCollection PieSeriesCollection { get; set; }
 
         public MainWindow()
@@ -166,7 +182,6 @@ namespace DiskInspection
             InspectionStatusCam1 = (int)(StatusState.Stopped);
             InspectionStatusCam2 = (int)(StatusState.Stopped);
 
-            OnPropertyChanged(nameof(InspectionStatus));
             OnPropertyChanged(nameof(InspectionStatusCam1));
             OnPropertyChanged(nameof(InspectionStatusCam2));
         }
@@ -204,6 +219,36 @@ namespace DiskInspection
             }));
         }
 
+        private async void TestOffline_Click(object sender, RoutedEventArgs e)
+        {
+            if (!btnStart.IsEnabled || _closing) return;
+            string folder;
+            using (var dialog = new CommonOpenFileDialog
+            {
+                IsFolderPicker = true,
+                Title = "Chọn thư mục ảnh RAW cho một lượt kiểm tra",
+                Multiselect = false
+            })
+            {
+                if (dialog.ShowDialog(new WindowInteropHelper(this).Handle) != CommonFileDialogResult.Ok) return;
+                folder = dialog.FileName;
+            }
+
+            DisableWindows();
+            try { await _mainController.InspectOfflineFolderAsync(folder); }
+            catch (OperationCanceledException)
+            {
+                if (!_closing && IsInspecting) UpdateStoppedUI();
+            }
+            catch (Exception ex)
+            {
+                if (IsInspecting) UpdateStoppedUI();
+                AppLogger.Instance.Error(ex.Message, "OFFLINE", ex);
+                if (!_closing) ShowError($"Test offline thất bại. {ex.Message}");
+            }
+            finally { if (!_closing) EnableWindows(); }
+        }
+
         private async void LocalWhite_Click(object sender, RoutedEventArgs e)
         {
             var userType = Login();
@@ -224,7 +269,7 @@ namespace DiskInspection
                 InspectionStatusCam1 = InspectionStatusCam2 = (int)StatusState.Unknown;
                 OnPropertyChanged(nameof(InspectionStatusCam1));
                 OnPropertyChanged(nameof(InspectionStatusCam2));
-                AppLogger.Instance.Error(ex.Message, "LOCAL DEBUG");
+                AppLogger.Instance.Error(ex.Message, "LOCAL DEBUG", ex);
                 if (!_closing) ShowError($"Local White test failed: {ex.Message}");
             }
             finally { if (!_closing) EnableWindows(); }
@@ -234,6 +279,7 @@ namespace DiskInspection
         {
             Dispatcher.Invoke(new Action(() =>
             {
+                ShowStatisticsMode(offline: false);
                 miLocalNotice.Header = $"LOCAL CAM{cameraId} WHITE ONLY - UV / PLC NOT TESTED";
                 miLocalNotice.Visibility = Visibility.Visible;
                 imbCam1WhiteOrigin.Source = imbCam2WhiteOrigin.Source = null;
@@ -246,7 +292,6 @@ namespace DiskInspection
                 lbMinDisCam1.Content = lbMinDisCam2.Content = "...";
                 lbUvDiskCountCam1.Content = lbUvDiskCountCam2.Content = "Not tested";
                 lbTimestamp.Content = "LOCAL TEST - not a production cycle";
-                OnPropertyChanged(nameof(InspectionStatus));
                 OnPropertyChanged(nameof(InspectionStatusCam1));
                 OnPropertyChanged(nameof(InspectionStatusCam2));
             }));
@@ -382,16 +427,32 @@ namespace DiskInspection
         {
             this.Dispatcher.Invoke(new Action(() =>
             {
-                AiStatus = resAI ? (int)(StatusState.Ok) : (int)(StatusState.Ng);
-                PlcStatus = resPLC? (int)(StatusState.Ok) : (int)(StatusState.Ng);
-                Cam1Status = resCamera1? (int)(StatusState.Ok) : (int)(StatusState.Ng);
-                Cam2Status = resCamera2? (int)(StatusState.Ok) : (int)(StatusState.Ng);
+                int ai = ConnectionStatus(resAI);
+                int plc = ConnectionStatus(resPLC);
+                int cam1 = ConnectionStatus(resCamera1);
+                int cam2 = ConnectionStatus(resCamera2);
+                if (ai != AiStatus || plc != PlcStatus || cam1 != Cam1Status || cam2 != Cam2Status)
+                {
+                    string summary = $"AI {ConnectionLabel(resAI)}, PLC {ConnectionLabel(resPLC)}, " +
+                        $"CAM1 {ConnectionLabel(resCamera1)}, CAM2 {ConnectionLabel(resCamera2)}.";
+                    if (resAI && resPLC && resCamera1 && resCamera2)
+                        AppLogger.Instance.Success(summary, "STATUS");
+                    else
+                        AppLogger.Instance.Warning(summary, "STATUS");
+                }
+                AiStatus = ai;
+                PlcStatus = plc;
+                Cam1Status = cam1;
+                Cam2Status = cam2;
 
                 OnPropertyChanged(nameof(AiStatus));
                 OnPropertyChanged(nameof(PlcStatus));
                 OnPropertyChanged(nameof(Cam1Status));
                 OnPropertyChanged(nameof(Cam2Status));
             }));
+
+            int ConnectionStatus(bool connected) => (int)(connected ? StatusState.Ok : StatusState.Ng);
+            string ConnectionLabel(bool connected) => connected ? "connected" : "disconnected";
         }
         #endregion
 
@@ -651,11 +712,44 @@ namespace DiskInspection
             });
         }
 
+        internal void UpdateOfflineStatistics(InspectionResult status)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                switch (status)
+                {
+                    case InspectionResult.Passed: _offlineCounts.ok++; break;
+                    case InspectionResult.Warning: _offlineCounts.warning++; break;
+                    case InspectionResult.Failed: _offlineCounts.ng++; break;
+                }
+                ShowStatisticsCounts(_offlineCounts.ok, _offlineCounts.warning, _offlineCounts.ng);
+            }));
+        }
+
+        private void ShowStatisticsMode(bool offline)
+        {
+            if (offline == _showingOfflineStatistics) return;
+            _showingOfflineStatistics = offline;
+            StatisticsPanel.Header = offline ? "Statistics (TEST OFFLINE)" : "Statistics";
+            if (offline)
+                ShowStatisticsCounts(_offlineCounts.ok, _offlineCounts.warning, _offlineCounts.ng);
+            else
+                ShowStatisticsCounts(_param.CurrentOK, _param.CurrentWarning, _param.CurrentNG);
+        }
+
+        private void ShowStatisticsCounts(int ok, int warning, int ng)
+        {
+            tbOKCount.Text = ok.ToString();
+            tbWarningCount.Text = warning.ToString();
+            tbNGCount.Text = ng.ToString();
+            UpdateStatistics(ok, warning, ng);
+        }
+
         #endregion
         #region Update Inspection Status
         internal void UpdateInspectionStatus(InspectionResult status)
         {
-            Dispatcher.BeginInvoke(new Action(() =>
+            Dispatcher.Invoke(() =>
             {
                 int statusInt;
                 if (status == InspectionResult.Passed)
@@ -665,14 +759,15 @@ namespace DiskInspection
                 else
                     statusInt = (int)StatusState.Warning;
                 InspectionStatus = statusInt;
-                OnPropertyChanged(nameof(InspectionStatus));
-            }));
+            }, System.Windows.Threading.DispatcherPriority.Normal);
         }
-        internal void UpdateInspectingMode()
+        internal void UpdateInspectingMode(bool offline = false)
         {
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                miLocalNotice.Visibility = Visibility.Collapsed;
+                ShowStatisticsMode(offline);
+                if (offline) miLocalNotice.Header = "TEST OFFLINE";
+                miLocalNotice.Visibility = offline ? Visibility.Visible : Visibility.Collapsed;
                 UpdateCam1WhiteOrigin(null);
                 UpdateCam2WhiteOrigin(null);
                 UpdateCam1WhiteResult(null);
@@ -697,7 +792,6 @@ namespace DiskInspection
 
                 lbTimestamp.Content = "...";
 
-                OnPropertyChanged(nameof(InspectionStatus));
                 OnPropertyChanged(nameof(InspectionStatusCam1));
                 OnPropertyChanged(nameof(InspectionStatusCam2));
             }));

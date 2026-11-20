@@ -16,6 +16,7 @@ namespace DiskInspection.Models
         public string ResImg { get; set; }
         public double MinDiskDistance { get; set; }
         public double MaxDiskDistance { get; set; }
+        public Newtonsoft.Json.Linq.JToken CaliperGapChecks { get; set; }
         public string CropBox { get; set; }
         public string UvBox1 { get; set; }
         public string UvBox2 { get; set; }

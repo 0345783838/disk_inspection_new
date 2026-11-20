@@ -133,18 +133,86 @@ def fan_maps(shape, a, b, curvature):
 
 
 def select_alignment(strong, band):
-    a, b, fitted = estimate_fan(strong, band)
-    best = None
-    # Tune geometric coherence only: never reward a desired number of peaks.
-    for factor in ((.8, 1., 1.2) if fitted else (1.,)):
-        for curve in ((-.10, -.08, -.06, -.04, -.02, 0., .02) if fitted else (0.,)):
-            mx, my, scale, dy = fan_maps(strong.shape, a*factor, b, curve)
-            aligned = cv2.remap(strong, mx, my, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT)
-            profile = (aligned > 0).mean(axis=0)
-            score = float(np.sum(profile**3))
-            if best is None or score > best[0]:
-                best = (score, a*factor, b, curve, mx, my, scale, dy)
-    return best, fitted
+    height, width = strong.shape
+    sign = -1 if band == 1 else 1
+    slope, tilt, hough_fitted = estimate_fan(strong, band)
+    # Subsample vertically during the search. Keep horizontal resolution so a
+    # narrow rim contributes just as much evidence as it does in the final warp.
+    rows = np.linspace(0, height - 1, min(height, 48)).round().astype(np.float32)
+    x = np.arange(width, dtype=np.float32) - width / 2
+    y = np.repeat(rows[:, None], width, axis=1)
+    dy = rows[:, None] - (height - 1) / 2
+    fan_shift = dy * (x / (width / 2))
+    curve_shift = (dy / height) ** 2 * x
+    scores = {}
+
+    def score(a, b, curve):
+        # Keep the fan's turning point near the image center. Independent
+        # tilt would allow a single bright reflection to reverse an outer rim.
+        if abs(b) > .30 * abs(a) + .02:
+            return
+        params = (a, b, curve)
+        if params not in scores:
+            mx = x + width / 2 + a * fan_shift + b * dy + curve * curve_shift
+            aligned = cv2.remap(strong, mx, y, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT)
+            profile = np.count_nonzero(aligned, axis=0) / len(rows)
+            scores[params] = float(np.sum(profile ** 3))
+        return scores[params]
+
+    identity = (0., 0., 0.)
+    score(*identity)
+    reference = identity
+    if np.any(strong):
+        if hough_fitted:
+            for factor in (.8, 1., 1.2):
+                for curve in (-.10, -.08, -.06, -.04, -.02, 0., .02):
+                    score(slope * factor, tilt, curve)
+            reference = max(scores, key=scores.get)
+        # Search multiple fans so an ill-conditioned Hough fit on a sparse or
+        # one-sided tray cannot narrow the search to the wrong geometry.
+        for magnitude in (0., .12, .24, .36, .48, .60):
+            for b in (-.08, -.04, 0., .04, .08):
+                score(sign * magnitude, b, -.04)
+        for a_step, b_step, curve_step in ((.06, .02, .04), (.03, .01, .02)):
+            a, b, curve = max(scores, key=scores.get)
+            for da in (-a_step, 0., a_step):
+                for db in (-b_step, 0., b_step):
+                    for dc in (-curve_step, 0., curve_step):
+                        candidate_a = a + da
+                        if 0 <= sign * candidate_a <= .8:
+                            score(candidate_a, b + db, curve + dc)
+
+    def full_alignment(params):
+        mx, my, scale, dy = fan_maps(strong.shape, *params)
+        aligned = cv2.remap(strong, mx, my, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT)
+        profile = np.count_nonzero(aligned, axis=0) / height
+        return (float(np.sum(profile ** 3)), *params, mx, my, scale, dy)
+
+    best = max(scores, key=scores.get)
+    alignment = full_alignment(best)
+    if best != reference:
+        local = full_alignment(reference)
+        # Switch away from a local fit only for a meaningful gain confirmed
+        # on all rows. This avoids changing a stable fit over sampling noise.
+        if alignment[0] < 1.10 * local[0]:
+            alignment = local
+            best = reference
+    return alignment, best != identity
+
+
+def compare_bright_ridges(value, first, second, contrast):
+    """Return evidence of shared brightness and of sustained separation."""
+    common_rows = np.flatnonzero((first >= 0) & (second >= 0))
+    fewer_bright_rows = min(np.count_nonzero(first >= 0), np.count_nonzero(second >= 0))
+    shared = 0
+    for row in common_rows:
+        left, right = sorted((first[row], second[row]))
+        dimmer = int(min(value[row, left], value[row, right]))
+        valley = int(value[row, left:right + 1].min())
+        shared += dimmer - valley <= contrast
+    # Two close rims may initially touch, then visibly separate along the band.
+    separate = len(common_rows) - shared >= .10 * value.shape[0]
+    return shared * 2 > fewer_bright_rows, separate
 
 
 def count_uv_rims(image, band, settings=None):
@@ -165,9 +233,11 @@ def count_uv_rims(image, band, settings=None):
                           height=.15, prominence=.08)
     peaks = peaks-1
     tracks, rejected, uncertain = [], [], []
+    ridge_samples = {}
     yy = np.arange(height)
+    search_radius = 5
     for center in peaks:
-        x0, x1 = max(0, center-5), min(width, center+6)
+        x0, x1 = max(0, center-search_radius), min(width, center+search_radius+1)
         candidate = aligned_value[:, x0:x1].astype(float)
         candidate[aligned_weak[:, x0:x1] == 0] = -1
         xs = x0+np.argmax(candidate, axis=1)
@@ -199,19 +269,35 @@ def count_uv_rims(image, band, settings=None):
         track = {'center_x': int(center), 'coverage': coverage, 'span': span,
                  'strong_coverage': strong_coverage, 'observed_slope': observed_slope,
                  'expected_slope': expected_slope, 'points': points.tolist(), 'reasons': reasons}
-        if reasons == ['no sufficient bright UV seed'] and strong_coverage >= .08:
+        if not reasons:
+            tracks.append(track)
+            bright = supported & (aligned_value[yy, xs] >= settings.strong_value)
+            ridge_samples[int(center)] = (np.where(bright, xs, -1), observed_x)
+        elif reasons == ['no sufficient bright UV seed'] and strong_coverage >= .08:
             uncertain.append(track)
         else:
-            (rejected if reasons else tracks).append(track)
-    # Two profiles tracing the same physical ridge are one instance, not two edges.
+            rejected.append(track)
+
+    # Two peaks can trace separate edges of the same bright ridge,
+    # even when their fitted curves diverge at the ends of the band.
     unique = []
     for track in sorted(tracks, key=lambda t: t['coverage']+t['strong_coverage'], reverse=True):
-        if any(np.mean(np.abs(np.array(track['points'])[:, 0]-np.array(other['points'])[:, 0])) < settings.min_separation
-               for other in unique):
-            track['reasons'] = ['duplicate ridge']
-            rejected.append(track)
+        samples, fitted_x = ridge_samples[track['center_x']]
+        for other in unique:
+            other_samples, other_x = ridge_samples[other['center_x']]
+            close_curves = np.mean(np.abs(fitted_x - other_x)) < settings.min_separation
+            overlapping_windows = abs(track['center_x'] - other['center_x']) <= 2 * search_radius
+            if not (close_curves or overlapping_windows):
+                continue
+            shared, separate = compare_bright_ridges(aligned_value, samples, other_samples,
+                                                     settings.strong_contrast)
+            if not separate and (close_curves or shared):
+                break
         else:
             unique.append(track)
+            continue
+        track['reasons'] = ['duplicate ridge']
+        rejected.append(track)
     tracks = sorted(unique, key=lambda t: t['center_x'])
     kept = np.zeros_like(weak)
     overlay = image.copy()

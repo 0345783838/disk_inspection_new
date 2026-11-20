@@ -631,3 +631,697 @@ and `SHA256SUMS.txt`. Complete ZIP:
 `.work/field_readiness_20261107/DiskInspection_factory_20261107.zip`;
 evidence/completion and original Debug backup are in that run folder.
 BroSight and earlier classifier-only ZIPs are not this complete application.
+
+## Excessive disk crossing by paired caliper spacing, 9 November 2026
+
+User requested comparing the same adjacent disks on the two calipers in each
+White segmentation band and authorized implementation. After reviewing the
+21.5px examples at20px, latest user request sets **30px** in
+`MAX_CALIPER_GAP_DELTA_PX`, both `SERVICE/config/config.env` and the installed
+`APP/DiskInspection/bin/Debug/plugin/config/config.env`. Strictly greater is NG;
+equality passes. Restart SERVICE after config edits. Compare calipers1/2 and3/4
+within their respective bands; retain existing rectified centre-to-centre
+spacing. Match disk identities through segmentation components, not nearest
+raw X (a uniformly tilted row can shift more than half a pitch). Only intervals
+adjacent on both scans are compared. Skipped intervals are reported as PARTIAL;
+no valid interval produces measurement NG. Production/Debug share the gate,
+`CaliperGapChecks` and red overlays; existing NG reasons/PLC error code remain.
+
+Evidence `.work/caliper_gap_delta_20261109/`; docs
+`docs/CALIPER_GAP_DELTA_20261109.md`.97runtime tests,28source White and28new
+standalone White passed, both-camera Debug/concurrent parity and actual APP
+transport/9merge cases passed. At30px no overall result changes on those28
+stored frames (4OK/15NG/9Warning); a30.5px Cam2 interval is on an already-NG
+frame.20px preview instead changed2Warning toNG at21.5px. Not factory accuracy
+truth. Models including active best111, retained models and canonical manifest
+are unchanged; no training or physical camera/PLC/light calls. Debug backend
+was rebuilt/installed with backup `backup_plugin`; test backend exited. A
+pre-existing invalid XML namespace in Debug `DiskInspection.exe.config` was
+repaired without changing parsed XML/settings values; source App.config and
+APP binary unchanged. Receipts bind the installed files.07November ZIP is
+historical and does not include this gate; use current Debug folder.
+
+## Factory segmentation supplement,17November2026
+
+The user completed344/344band review in `.work/segmentation_factory_20261117/`
+and explicitly authorized checking/training, unrestricted object overlap into
+one union mask, and balanced old/new training with old-model comparison.
+Current new run `.work/segmentation_factory_train_20261117/`, dashboard8811,
+frozen entrypoint `code/train_segment_factory.py --phase campaign`; read
+`docs/SEGMENTOR_FACTORY_TRAIN_20261117.md`, protocol/status and active segment
+training pointer before acting. Review editor8810 stays available. No classifier
+training, label changes or deployment; classifier canonical revision12 remains
+separate and unchanged, current best111/detector/segmenter are protected.
+
+All172new White frames/344bands/2064tiles retained, including correct/empty
+data. Shared Canvas renderer applies62selected-instance erasures, then ORs all
+object masks; overlap is allowed, fragment IDs are not physical disk counts.
+Exact frozen NPZ union pixels are truth; txt paths are bbox proxies only.
+Grouped70/30 has122frames/1464tiles train and50frames/600tiles val, each new
+camera732train/300val; new empty50train/26val. Paired capture groups,120s,
+decoded flip aliases and212near-appearance candidates are conservatively
+connected. Groups are heuristic, not verified physical tray identities.
+
+All2364old train/261old val retain labels/splits. Every combined3828train
+record appears once each epoch plus900new train-only hard draws,450per camera,
+giving2364old/2364new references(4728total). Val861=261old+600new. One fresh
+native-hard fit only from current hard parent PT10bcc17c.../ONNX13394589...,
+mask proto/cv4 only, all BN/non-mask state frozen, lr1e-4/max40/patience10,
+batch8, seed1117. No extra fits or val hard mining. Same calibrated native512
+union objective as previous successful hard fit plus retained mask/background
+loss. Fit checkpoint fitness/gates and fixed25/50/75% blends predeclared.
+
+Before recovery inspect actual Python parent/child, lock, active_child, logs,
+frozen protocol/code/input hashes and STOP_REQUESTED; never duplicate trainers,
+silently restart unfinished fits or resume a completed/user-stopped run.
+Parent must finish all candidates, full2325crop PT/ONNX parity,200paired White
+hardware-off replays(28old+172new),344full-band union comparisons, both-camera
+debug/geometry/classifier checks, whole-software<=2x and protected hash audit
+before publishing COMPLETE. No automatic monitoring automation was created.
+Additional user requirements/CUDA preflight are bound by preflight_addendum.json.
+Development validation and parent exposure on old val must be acknowledged.
+No deployment; report all failures/candidates and retain installed parent if
+unchanged gates fail. Leave editor/report servers available.
+
+Technical loader repair17November: first attempt failed94/591batches into
+epoch1, no committed epoch/checkpoint. Ultralytics deduplicated same-bbox
+records despite differing valid overlapping masks. Restore original proxy
+records in the exact-mask loader; all4728train/861val counts and affected-case
+CUDA AMP forward/backward tests pass. No labels/mask pixels/splits/sampling/
+loss/gates/parent/runtime changed. Failed attempt and original code/protocol
+are retained in run repairs/duplicate_bbox_loader_20261117/. One valid fit is
+retried from parent because no optimizer checkpoint exists; not an extra search
+candidate. Current protocol SHA40f06549dac594f3849dcfac1524952cd0465a81e96ff403858b25fa1209dca8.
+
+User next authorized autonomous completion/evaluation, inspection tomorrow.
+Run finish_review.py --wait is a separate postprocessor, NOT a trainer: after
+primary completion it runs historical5filename/4unique-frame/8band TRAIN
+diagnostics on parent/all candidates and independently recomputes all861saved
+baseline/selected union metrics plus hashes. It owns postprocess.lock and
+writes postprocess_status.json/independent_completion_verification.json/
+ASSESSMENT.md. Do not start a duplicate; inspect its actual process/status on
+failure. It never changes fitness/gates or launches fits. Full user-requested
+completion includes both primary and postprocessing audits, with no deployment.
+
+## Completed factory segmentation supplement, 17 November 2026
+
+`.work/segmentation_factory_train_20261117/` is COMPLETE:21 learned epochs,
+best11, patience10. Do not resume/repeat. One completed fit plus the preserved
+failed94-batch loader attempt. All2064 new tiles and2625 retained old records
+were used across immutable train/val; val600new+261old. Training exposure50/50
+old/new, new cameras balanced, all exact overlaps/62erasures preserved.
+
+Installed parent -> learned best new-val union F1:90.62% ->95.25%
+(Cam1 90.57->95.38; Cam2 90.68->95.11). New uncovered mask regions121->129;
+October retained val F1 95.34->91.26. All four fixed candidates failed gates;
+installed parent retained, no deployment. Historical5filenames/4unique frames/
+8bands are TRAIN diagnostics:union F1 95.15->91.48%, mask-derived primary-
+caliper absolute error2->3. Priority case Image_20261018112236010.bmp Cam2
+band1 has mask/parent/learned caliper counts7/7/6; not physical count truth.
+
+Both selected parent and actual learned best passed separate full2325-crop
+PT/ONNX and200paired hardware-off White replays. Learned has2318exact union
+masks/minIoU0.999371; raw outputs allclose. Learned whole-White median
+1.021x/max1.200x, all<=2x; geometry/classifier and both-camera
+production/debug parity pass. Full344band learned comparison is under
+learned_diagnostic/, not the original parent-fallback galleries. release/
+s_p_factory_20261117.* intentionally contains the retained parent; actual new
+weights remain fits/native_hard/weights/best.*. Never confuse these or deploy
+the learned model without a new instruction.
+
+Original training input/code/protocol/runtime/canonical hashes remain exact.
+Report audit recovered from one precisely verified library UI-notice transition:
+Ultralytics exporter.py393 changes local openvino_msg true->false and CRLF->LF.
+Exact prior bytes/hash reproduced; receipt and negative guard tests preserved
+in repairs/library_notice_settings_20261117/. Original protocol/addendum kept;
+no model/label/split/gate changes or resumed training for this repair.
+
+Read DANH_GIA.md, ASSESSMENT.md, delivery_verification.json,
+independent_completion_verification.json, learned_diagnostic/completion.json
+and old_hard_cases.html. Final independent recomputation checks all861 learned
+union predictions/group F1. Validation is development data; old hard cases are
+fitted diagnostics, not independent physical-tray acceptance. Human factory
+review remains pending. Preserve current SERVICE/APP/canonical revision12 and
+retained best111 files. Leave review8810/report8811 available; no automation.
+
+## Two-model segmentation review preference, 18 November 2026
+
+The user only wants to compare the installed segmenter and newly trained best.
+Public dashboard8811 and old_hard_cases.html now show only installed_parent
+(active s_p_edge_white_native_hard_20261024_102450.onnx) and native_hard_best
+(run fits/native_hard/weights/best.onnx, epoch11). Hide blend candidates in the
+review presentation; retain their original metrics/checkpoints as historical
+evidence. No model rename/deployment/training/label change. Prior full HTML is
+archived in presentation_history/two_models_20261118/. See
+two_model_presentation_verification.json.
+
+## Pending legacy-scope inspection, 18 November 2026
+
+User requested another segmentation fit excluding legacy, then explicitly asked
+to see the legacy images to verify the intended exclusion first. No new fit or
+exclusion has started. Read-only gallery8812 is registered in
+.work/ACTIVE_SEGMENT_LEGACY_REVIEW.json, artifacts
+.work/segmentation_legacy_review_20261118/. Proposed scope is origin==old only:
+246 crops from an/code_train/datasets/disk,129train/117val in the17November
+manifest. HA816, HA-derived523, reviewedOctober1040 and November2064 are
+separate, not yet proposed for exclusion. User confirmation of which source
+means legacy is pending; do not start dependent training/exclusion before that
+clarification. Labels, source pools, prior splits/models/runtime remain intact.
+
+## Authorized no-legacy segmentation repartition, 18 November 2026
+
+User confirmed the246-crop origin=old legacy gallery, then authorized exclusion and repartition. User subsequently asked about union loss; exact17November method is retained. Planned October union-loss widening was withdrawn before any fit; see method_unchanged_receipt.json. No deployment/classifier work.
+
+Run .work/segmentation_no_legacy_20261118/, dashboard8813, code/train_no_legacy.py. Protocol SHAfad326d1be3ef5e38ed534fa3f17b972ad9c8c80f6d176c8c59bc2b0510c6798. Never resume a completed run or duplicate parent/child. Before recovery inspect real processes, campaign.lock, active_child.json, logs, STOP_REQUESTED and frozen hashes. Completed17November run is not resumed.
+
+Exactly246 legacy IDs match the user-reviewed gallery; sources/labels remain untouched.4443 retained records partition3172train/1271val pool;768unaugmented real val select checkpoints:600November,96October,72HA.503held-out derivatives diagnostic only.1535records switch split;192of former600November val remain val. Whole raw source/derived families, previousNovember capture/near-appearance groups and decoded/flip/180aliases never cross splits. MILP bounded1%relative gap, actualgap0.0097115, not exact global optimality. Classifier canonical revision12 unchanged.
+
+Each3172train record once plus244new train-only hard extras,122per camera;1708old/1708new references per epoch. Same previous25%hard-pool algorithm, initial installed parent only, not the17November learned best. Same NativeUnionLoss source bytes, proto/cv4-only, all BN running stats frozen, AdamW lr1e-4, max40/patience10/batch8/seed1117, bounded HSV and no geometry. Split seed1118. Exact-mask loader count and CUDA AMP forward/backward tests pass; no optimizer step in preflight. Original dense_reviewed flags true/true/false/false are retained. No widening to October.
+
+Same relative nonlegacy fitness weights(.8new-camera strict unionF1+.1HA-cameraF2+.05October unionF1)/.95. Original14nonlegacy tests unchanged;2legacy-specific gates not applicable, never silently passed. One fit, no blends/search. Only installed vs new model shown. Artifact s_p_edge_no_legacy_20261118.onnx is evaluation-only; activeSERVICE stays current hard segmenter. All object masks overlap and OR,62erasures/labels untouched.
+
+Parent automatically evaluates fixed768val, verifies fit non-mask/BN exact state, exports new model, full2232crop PT/ONNX parity, evaluates held-out503derivatives separately, generates val errors, replays200current-config White hardware-off with344new-band union comparison and both-camera production/debug/geometry/classifier parity, then reviews4old hard frames/8bands with current split labels. Final union arithmetic independently recomputed from saved masks and all hashes rechecked before COMPLETE. Reports must acknowledge changed cohorts, parent HA/October exposure and development-only validation. Cannot attribute changes solely to legacy removal because partition changed simultaneously. Timing excludes camera/PLC/network/file/JPEG prep; <=2x whole-software limit.
+
+The new no-legacy fit is now running: parent5620/child22300 at launch, exec
+session91183, dashboard8813. Use actual process state and run status before
+recovery; never duplicate. Initialization is the installed parent which had
+historical legacy exposure; no-legacy means no246legacy images in this new
+fit/val, not erasure of the parent's prior learning. No new automation.
+
+## NEW_IMAGES_2 classifier fast review, 18 November 2026
+
+The user requested full preliminary labeling of NEW_IMAGES_2, lowest confidence
+first, then explicitly requested interactive review/label changes and fast UX.
+Review is now http://127.0.0.1:8814/, artifacts
+.work/classifier_factory_20261118/. Port8813 belongs to the concurrent
+segmentation_no_legacy_20261118 dashboard; the old classifier-only server on
+that port was stopped without touching the trainer.
+
+All17200crop proposals from172White frames/86capture cycles are retained.
+review_store.py writes user decisions ONLY through CanonicalDataset.save.
+New confirmed real crops have origin=factory_20261118, stable normalized IDs,
+source/crop/proposal hashes and camera/frame/slot/geometry provenance. Valid
+labels go into canonical reference/{ng,no_disk,ok}, role=reference_only,
+split=null; uncertain/excluded go into canonical excluded/. No train/val
+assignment or training authorization is implied. Existing5393labels/splits
+must remain unchanged except an explicit user edit to the same canonical
+alias. No separate decisions overlay/prepared training pool. Live revision
+comes from the current manifest, not the initial revision12 preparation hash.
+
+UX:1NG/2no_disk/3OK, Enter keep proposal, U uncertain, X exclude, arrows skip,
+Ctrl+Z undo, auto-save then auto-next, grid multi-select, progress/status filters.
+Undo first confirmation returns that canonical record to unreviewed; it does
+not erase provenance. Only navigation/last crop is stored in the browser.
+All automated label-writing tests used the marked ux_fixture/ or temporary
+fixtures, never the actual dataset; these are not training sources. Read
+README_VI.md and ui_verification_v2.json. No new fit/model activation/runtime
+source/config/model change by this UX task. User saves revoke old classifier
+training authorization and legitimately change the live manifest hash; do not
+restore old labels to satisfy historical/completed-run integrity guards.
+
+Concurrent-review guard amendment: the active segmentation run now freezes the
+exact prior classifier manifest/catalog/CSV bytes under
+.work/segmentation_no_legacy_20261118/repairs/concurrent_classifier_review_20261118/.
+Only those three protected annotation paths point to their frozen copies.
+Protocol original and original authorization receipt are preserved; receipt.json
+links old SHA fad326d1be3ef5e38ed534fa3f17b972ad9c8c80f6d176c8c59bc2b0510c6798
+and amended SHA c0b2280526abd039bac5b7aaebed8c18c35da375b78f6369b503fc3ad5b30577.
+All segmentation training/code/input/split/loss/sampling/gates and other runtime
+hashes are identical; fit was not stopped/restarted. Positive live-label-change
+and negative runtime/snapshot guard tests passed, and all actual hashes passed.
+This scope repair implements the latest explicit concurrent label-edit request.
+Do not claim the LIVE classifier manifest stayed unchanged after user review;
+the inherited final_report wording must be read with/corrected by this receipt.
+
+## Edge completeness supersedes area matching, 18 November 2026
+
+The no-legacy fit is COMPLETE:15epochs, best5. Do not resume. The user now
+explicitly prioritizes catching every edge, not union-pixel area overlap.
+Reassess existing best5 and last15 only at
+.work/segmentation_edge_coverage_review_20261118/, dashboard8815, entrypoint
+evaluate.py (read-only; no fit). Classifier review owns8814; do not interfere.
+Primary:1-to-1 missed labeled edge crossings at two real caliper rows; separate
+raw-mask misses from production cleanup/caliper misses. Fixed8raw-pixel center
+tolerance;4/8/12sensitivity, never threshold-search. All-row centerline crossing
+recall measures continuity, not area IoU. Reference is reviewed mask runs,
+not independent physical disk counts. Rank best/last lexicographically by
+val caliper misses, raw-mask misses, caliper extras; only116valbands select,
+282train bands diagnostic. No extra training/weight/threshold/runtime changes
+or deployment. Public view only installed vs selected new. Preserve previous
+F1 results/gate failures as history; new metric is post-hoc development and
+not retroactive passing of old gates. Last15 export/state check and12-image
+PT/ONNX smoke passed; only best5 has prior full2232parity/200White replay.
+Read .work/ACTIVE_SEGMENT_COVERAGE_REVIEW.json and protocol/status before
+recovery; no duplicate evaluation. See no-legacy SCOPE_NOTE.md for authorized
+concurrent classifier label edits and frozen classifier snapshot guard repair.
+Never claim the live classifier annotations stayed revision12/unchanged.
+
+## Completed edge-first assessment, 18 November 2026
+
+Coverage review8815 is COMPLETE;398reviewed bands evaluated,116current val
+select only between saved best5/last15. No extra fit. Selected new is best5,
+copy s_p_edge_coverage_20261118.onnx under review artifacts; bytes match the
+no-legacy best5, not a newly trained network. Installed model retained.
+Val5246labeled edge crossings on two production scan lines: installed/new
+raw-mask misses104/107, actual cleanup+caliper misses134/162, extras2/2,
+bands with no caliper miss35/116 vs25/116. Last15 has105raw misses,179caliper
+misses,3extras; internal only.4px/8px/12px sensitivity preserves ordering;
+8px and12px totals identical. These are crossings, not unique physical disks.
+Old8hard bands: caliper misses10/10 on162reference crossings; raw misses7/8.
+
+Diagnostic decomposition of val actual-caliper misses: installed99already
+missing in raw mask +11lost by area cleanup +24present after cleanup but
+caliper-unread. New102+6+54;47of new54unread stripes are1–3px wide. No threshold
+or runtime change. See caliper_miss_decomposition.json. Model is still not
+better under the user's edge-completeness goal; area F1 must not override it.
+
+Public index/old_hard_cases.html show only installed vs selected new with red
+missing-position markers. Results and original training gate failures remain
+unchanged historical evidence. delivery_verification.json and
+access_and_arithmetic_verification.json pass; no evaluator remains active.
+Segmentation annotation snapshot still matches current review. Concurrent
+classifier labels may advance; do not restore them or claim live revision12
+unchanged. Current deployment/model/config unchanged. Read review protocol,
+RESULTS.md and latest classifier review section before further work.
+
+Any future authorized fit should freeze missed-edge/continuity-first checkpoint
+selection before training, rather than reuse the old area-heavy fitness as
+primary. This does not authorize an extra fit or rewrite a completed run.
+Preserve exact old loss/method unless the user authorizes a method change.
+
+
+## YOLO11s pretrained segmentation, 18 November 2026
+
+User authorized one new trial from generic YOLO weights and all non-demo data.
+Run .work/segmentation_pretrained_s_20261118/, dashboard8816. Initial weights
+are the 80-class yolo11s-seg.pt used on30September; train the 1-class network
+including backbone, box/confidence, mask and BN, from the fixed no-legacy split.
+4443 retained records (3172 train,1271 val pool), 3416 epoch references, 246
+legacy demo excluded. No classifier training or live label interaction.
+One fit max40/patience10,512px/batch8/lr5e-4, previous exact-mask loss. Selection
+uses missed crossings at current caliper first, extras second, raw mask misses
+third across the116 reviewed val bands. Offline thin-trace comparison only.
+An Ultralytics grayscale singleton loader repair passed all116 bands/696 tiles
+prior to starting any fit; logs and exact protocol change kept in preflight_fix.
+Do not duplicate/restart a fit without checking actual trainer, lock, logs and
+STOP_REQUESTED. Evaluate actual best, paired parity/replay and the historical
+8 bands. Keep deployment separate.
+
+The caliper investigation for the preceding fine-tune reproduced current results
+on398 bands. Offline reading of thin mask traces cut val misses134->120 for
+installed and162->116 for best5, with2 extras for both. Train diagnostic extras
+increased21->25 and4->5. No runtime change. Report on8815/caliper_recheck.html.
+
+
+## Updated YOLO11s training horizon, 18 November 2026
+
+The user superseded max40/patience10 with max200/patience60. Resumed from
+the optimizer-bearing epoch4 checkpoint, restored EMA and best epoch3/fitness.
+The original launcher was stopped at an epoch boundary and its epoch5 output
+archived. Epoch5 is repeated under the revised linear schedule, retaining the
+first four epochs. Actual resume verification records 290 optimizer states
+and 369 EMA updates. Process22320 at launch. Read status.json and new protocol,
+train.stdout.log and schedule_transition_200e. No change to data/model size,
+loss or ranking, and no deployment.
+
+
+## Caliper checkpoint selection at 3 px, 18 November 2026
+
+User requested evaluation below the 4px minimum peak separation. Choose best
+at 3px on the same116 val bands by misses/extras/raw-mask misses; report2px and
+4px separately. Matching tolerance, profile thickness, scan length, cleanup,
+model loss, deployed SERVICE config, max200 and patience60 remain unchanged.
+Older4px fitness cannot rank under3px. Preserved best epoch6 and last epoch26
+were re-scored at2/3/4px and epoch6 seeded the new best. Earlier unsaved epochs
+cannot be re-scored. Epoch27 repeats from optimizer-bearing epoch26 checkpoint
+with EMA preserved. Patience counts from epoch26 or a subsequent improvement.
+See caliper_transition_3px receipts/logs and caliper_resume_verification.json.
+Final report scores both models under all three same settings. Hardware-off
+White replay remains under the as-configured SERVICE 4px settings.
+
+
+## Completed YOLO11s pretrained segmentation, 18 November 2026
+
+Run segmentation_pretrained_s_20261118 complete, epoch86 early stop, best6
+rescored under3px from the preserved checkpoints. Do not resume/repeat.
+116 val bands, model installed->pretrained misses/extras by gap: 3px120/3
+->122/4; 2px116/4->73/5; 4px134/2->156/3. Old difficult8bands at3px misses8->6.
+PT/ONNX2232 tiles passed raw tolerances,2228 exact unions. 200 White runtime
+replays pass with SERVICE 4px, median0.980x/max1.442x. 2px is paired offline
+development, not a field acceptance result. No deployment. See dashboard8816
+and completion.json. Active segmentation pointer recorded complete.
+
+
+## White mask postprocessing audit at 3 px, 18 November 2026
+
+User asked to improve mask shape before caliper, then test at3px and separate
+caliper misses from segmentation misses/false edges. Reusable prototype is
+SERVICE/src/tools/white_edge_mask.py. Offline evaluation and gallery8817 are
+under .work/segmentation_white_mask_postprocess_20261118/. No deployment or fit.
+Width5 with no gap bridging showed the best measured tradeoff among tried
+variants at3px on116 development-val bands. Installed misses/extras120/3 to
+110/4, YOLO11s pretrained122/4 to87/4. Caliper misses despite mask on scanline
+21->12 and73->41 respectively. Separate experiments (filter first + bridge7 +
+width7; add only raw-supported pairs) are retained with outcomes. The mask
+queue is for review of frozen val only, not direct train additions. Original
+mask local absence/excess under +/-7 row audit is50/6 installed and33/7 new.
+16 White hardware-off frames,32 paired replay comparisons at3px, runtime
+geometry/classifier and both-camera normal/debug pass. Reports and tests only;
+existing SERVICE startup/config/active models were not changed.
+
+
+## One-column label seam repair and re-training, 18 November 2026
+
+User flagged screenshot showing first November Cam1 band2 with label fragments
+t4p0 and t5p3 at core boundary1555. Verified missing column1554 for68 rows.
+Audit398reviewed bands, repaired369 (326Nov/43Oct), added24533 pixels;
+1035train/480val records receive linked exact-mask lineage. Ambiguous pairs260
+including11 protected intentional erasures stay as supplied. Source review
+and completed campaigns immutable. See new snapshot and before/after link.
+Run .work/segmentation_label_seam_repair_20261118/ dashboard8818 PID1548 at
+launch. Generic pretrained YOLO11s-seg, same split/ordered sampler all4443
+records excluding246legacy, max200/patience60, exact mask loss. Launch once.
+Selection3px, secondary2/4px across same116bands with corrected5175 crossings.
+Previous pretrained control now2px43misses/46extras under corrected labels
+versus prior73/5 under old labels. Final compare both prior fits and installed
+on same corrected truth; model improvements are separate from re-labeling.
+Complete parity/replay automatically. No production postprocess or deployment;
+user specifically wants label repair/train first, fragmentation work later.
+
+## NEW_IMAGES_2 user-confirmed intake and supplementary classifier fit, 18 November
+
+User said every NG/empty suggestion was reviewed and explicitly asked to assume
+remaining OK correct, preserve current corrections, and train/evaluate. Snapshot
+revision219 has190 individually saved decisions (171 changed), all retained.
+Revision220 adopts17,200 real November crops through CanonicalDataset.save:
+190 saved,1,911 unchanged NG/empty accepted by category,15,099 assumed OK.
+Only the 190 are marked individually reviewed. Existing5,393 rows and old
+splits preserved exactly. No crops omitted. New grouped12,000 train/5,200 val;
+combined15,778/6,815. Both cameras per capture, burst, apparent duplicates and
+decoded/flip aliases stay together; validation is development, not verified
+independent physical trays. Read .work/classifier_factory_train_20261118/
+user_review_receipt.json, review_decisions_snapshot.json, split_report.json and
+intake_audit.json. Do not restore older canonical labels or TRAIN from proposals.
+
+One new YOLO11n-cls fit/evaluation, dashboard8821, run
+.work/classifier_factory_train_20261118/ and train.py. Exact active_dataset
+revision220 manifest/hash and crop bytes frozen before fit. Parent HA best111,
+frozen BN statistics, AdamW lr1e-5, NG CE2:1:1, side-aware cycling source/camera/
+class sampler from train only,8192 exposures/epoch, max20/patience6/min7.
+NG-first rank retains old cells and guards reject-all. Compare learned best vs
+installed HA best111 by source/camera and label provenance, full6815 PT/ONNX
+parity and 36 offline White frames. No deployment. Check real process, lock,
+logs and STOP_REQUESTED before any recovery; do not duplicate or resume a
+completed run. Later live label edits do not change this immutable snapshot.
+
+
+## Broad 1–3 px label bridging and re-training, 18 November 2026
+
+User explicitly requested joining near mask fragments without a direction
+condition, with 1–3 px fill and autonomous re-training/evaluation. Old
+seam-only run COMPLETE, 80epochs/best20, PT/ONNX2232 and White replay200
+passed; do not resume. New run .work/segmentation_label_near_gap_20261118/,
+dashboard8820, train.py campaign PID23592 at launch. New exact label
+manifest bridges bracketed blank horizontal/vertical runs 1–3px once,
+merges linked mask lineage and protects manual erasures. 18,000 pixels on
+393/398 bands; 1,225 train and602val records regenerated. Verified all
+four previously skipped screenshot points. Original manual editors 8810
+and 8819 stay intact; new target revision is frozen in this run. Same
+4,443 nonlegacy rows, ordered3,416 epoch exposures and split. New validation
+has5,153 crossings on116bands. Re-score prior seam-only and installed
+against exact same new labels before model comparison. Generic YOLO11s-seg
+pretrain, max200/patience60, select3px and report2/4px, old hard cases,
+PT/ONNX2232, White replay200, per-point gallery with length experiment.
+No runtime changes or deployment. Before recovery check process, lock,
+STOP_REQUESTED and status; never start duplicate or restart completed fit.
+
+Completion update: classifier_factory_train_20261118 is COMPLETE. One fit,
+13 epochs, best7, all15,778 training rows seen. Initial attempt failed before
+optimizer/checkpoint on Windows int32 CE targets; verified explicit torch.long
+repair, archived original code/protocol/logs; no recipe or snapshot changes.
+Frozen 6815val installed -> learned ONNX errors51->44, NG misses7->5,
+falseNG12->14, empty-as-OK14->12. New5200val 47->39 errors, NG4->3,
+falseNG12->14, empty-as-OK14->9. New Cam1 NG1->0, Cam2 3->3.
+53 individually saved new val errors47->29; 4534 assumed-OK val 0->9 label
+disagreements (5 NG and 4 no_disk), labels assumed so ground truth unverified.
+HA2NG->0, October empty-as-OK0->3, legacyNG1->2. Gates fail. Keep best111 installed.
+36 White offline pairs pass geometry/caliper and both-camera debug, median0.992x
+max1.422x. Original GPU TF32 PT vs CPU ONNX:1 argmax mismatch/max0.004984;
+independent CPU PT/CPU ONNX and TF32-off GPU PT/CPU ONNX match all6815 argmax
+(max1.05e-5 and5.66e-6). Original gate retained, no export/weights modified.
+Active training pointer complete, no deployment. See dashboard8821,
+RESULTS.md, completion.json, parity_diagnostic.json and errors.html.
+
+## Segmentation 1–3 px label bridge complete, 19 November 2026
+
+Run `.work/segmentation_label_near_gap_20261118/` is COMPLETE. One fit,
+86 epochs, best26, patience60. Do not resume/repeat. The first White replay
+stopped on image86 because two unchanged November masks had manifest paths
+in the preceding run and no local replay copies. Evaluation-only recovery
+verified every November mask digest and materialized two byte-identical copies.
+Original code, protocol, labels, split, weights and initial diagnostics are
+unchanged. See `evaluation_recovery/repair_receipt.json` and `completion.json`.
+
+On the same 116 development-val bands, installed to new misses/extras are
+25/6 to18/2 at2px, 28/4 to21/1 at3px, 41/2 to40/1 at4px. Historical hard
+held-out two bands worsen from3 to6 misses at3px. PT/ONNX2232 raw tensors
+pass, 2227 unions exact and the other five differ by one pixel each. All200
+hardware-off White pairs and both-camera debug checks pass; median paired
+ratio1.023x, max1.558x. Runtime hashes unchanged and no deployment.
+Dashboard8820 and `final_count_review/` are available.
+
+## Classifier archive and one no-legacy fit, 19 November 2026
+
+User requested saving the learned with-legacy model as the 19_11 version and
+one new classifier fit without legacy. Byte-exact checkpoint epoch7 from
+classifier_factory_train_20261118 is archived at SERVICE/config/models/
+c_p_19_11_2026_co_legacy.{onnx,pt}. Active c_p.onnx remains HA best111.
+Archive receipt: .work/classifier_no_legacy_20261119/archived_with_legacy.json.
+
+New run .work/classifier_no_legacy_20261119/, dashboard8822, train_no_legacy.py.
+Receipt acknowledges partial review on exact canonical revision228. Preserves
+all crop IDs, hashes, labels and splits in canonical; archived input snapshot
+has exact manifest, only nonlegacy crops on disk. Excludes420 train and180
+val origin=old_legacy_train. Remaining15358 train/6635 val, same split groups.
+All retained training labels match previous fit; four revised validation labels
+are used to score all three models. Keep old eval truths and results historical.
+One fit from same installed HA best111 PT, old parent has legacy exposure.
+Reuse crop preprocessing, AdamW, fixed BN, NG CE2:1:1, seed, flip, 8192 draws,
+max20/min7/patience6. Reassign prior 5% legacy draw budget equally to HA and
+October, November stays65%. Checkpoint ranking drops legacy scopes and scores
+with TF32 off for ONNX consistency; train precision unchanged. All models
+compared under fixed revision228 truth. Review still partial and development-only.
+No deployment. On completion verify full6635 PT/ONNX and36 paired White offline,
+runtime hashes and process exit. Do not launch a duplicate or resume a completed
+fit. Check real process, campaign.lock and STOP_REQUESTED before any recovery.
+
+The short no-legacy run is COMPLETE: 12 epochs/best6, PT/ONNX6635 exact,
+36 White pairs pass (median0.975x/max1.187x). Same 6635val HA best111 / saved
+with legacy / short no legacy: errors54/38/39, missed NG8/3/3, false NG12/12/14,
+empty-as-OK16/12/12. All three live models compare on revision228. Short run
+is historical and not to be repeated. No activation.
+
+User superseded the short horizon with max200 / early stop after60 consecutive
+epochs without strict improvement. New long run
+.work/classifier_no_legacy_200e_20261119/, dashboard8823, train_no_legacy.py,
+PID32808 at launch. Fresh optimizer from same HA best111 since prior weights
+do not contain optimizer state. Exact same revision228 records, exclusions,
+train15358/val6635, class/source budgets and precision policy. Only max horizon
+and patience change (cosine schedule stretches accordingly). Leave short run
+8822 and saved with-legacy version available. New run auto-evaluates against
+both fixed models and runs full parity/replay verification. No deployment.
+Never duplicate, resume a complete run, or touch another trainer. Check its
+actual processes, campaign.lock, logs, STOP_REQUESTED before recovery.
+
+Long no-legacy run .work/classifier_no_legacy_200e_20261119/ is COMPLETE:
+77 epochs, best17, exactly60 epochs without improvement, cap200. No resume
+or repeat. Revision228 shared6635val best111 / saved with legacy / long no
+legacy errors54/38/30, missedNG8/3/3, falseNG12/12/7, empty-as-OK16/12/13.
+With and without legacy miss the same3 November Cam2 NG. New Cam1 errors
+9->7, Cam2 26->21; Cam2 falseNG9->4 and empty-as-OK9->10. November5200
+validation errors35->28. Old short no-legacy run had39errors/3NG/14falseNG.
+Development validation, 4529assumed-OK retained; excludes legacy from new
+fit/val but same parent had prior legacy exposure. Different train horizon
+precludes attributing the result solely to legacy removal. PT/ONNX6635
+exact argmax (max1.63e-5), 36 White pairs geometry/counts/debug pass,
+median1.016x/max1.250x. Gates fail, no activation. Archived 19_11 with-legacy
+files and active HA best111 hashes verified. Trainer exited. Dashboard8823,
+RESULTS.md, comparison_three.json and errors_three.html remain available.
+
+## User-selected SERVICE classifier, 19 November 2026
+
+Latest user explicitly selected the long no-legacy best17 checkpoint as current
+best and requested replacing SERVICE's classifier. SERVICE/config/models/c_p.onnx
+now has SHA256 79f95f774a9bd4fed783eec3b7d577a5d6d4ec347ec4bb70e4b05997a418b38e.
+Selection metadata and ACTIVE_CLASSIFIER_FIELD_TEST point to the new model.
+Old best111 was hash-verified and backed up with previous selection metadata
+under .work/service_classifier_no_legacy_20261119/backup/. The named best111
+source and named 19_11 with-legacy archive are retained.
+
+Activation receipt .work/service_classifier_no_legacy_20261119/activation.json.
+Fresh SERVICE initializer using actual config verified 9 crops and replayed
+one stored November White image per camera without hardware. Config/canonical/
+detector/segmenter/APP Debug plugin preserved. This covers SERVICE's configured
+model path; APP Debug uses its own separate plugin. No live SERVICE listener
+was present and no server or PLC was started. Prior run metrics and recommendation
+failures stay historical, including three validation NG misses, and the user
+override authorizes this selection. No additional fit or deployment implied.
+
+
+## Segmentation train-only tile shifts, 19 November 2026
+
+User explicitly requested re-training with shifted image/mask crops and their
+two recently corrected Cam2 labels. Run .work/segmentation_shift_tiles_20261119/
+dashboard8824, PID35744 at launch. Exact editor Canvas mask export for revision
+5 of Cam2_ef6bf23e5d83a522_band2 and revision7 of Cam2_8f6253eda4258da9_band1.
+Both stay validation; three tile targets changed. Preserve previous bridges
+away from edited strokes, use latest manual pixels around edits. 116 val
+bands, 5,151 crossings. Prior epoch26 re-scored on same new labels has
+2px16/2 and3px19/1 missing/extra; SERVICE segmenter2px24/7 and3px27/5.
+All4,443 nonlegacy originals, same groups/split and3,416 baseline epoch
+references; add1,692 train-only horizontal shifts +/-16/32px across both
+cameras, 5,108 total references per epoch. Source/image/decoded-flip groups
+stay within the split, exact aligned raster masks OR. No geometry changes
+at evaluation. Fresh generic YOLO11s-seg, same200/60 and loss, choose3px
+misses first, report2/3/4px, two edited bands, old hard cases, parity2232
+and hardware-offWhite200. Inspect gallery for both 2/3px. Current protected
+runtime captures pre-existing user-selected classifier epoch17; segmenter
+unchanged. No runtime edits/deployment in this campaign. Do not duplicate
+or resume a completed run. Check process/lock/STOP_REQUESTED before recovery.
+
+Shifted-tile run stopped partway through epoch30 on a dense binary-target
+assertion. The exact failing value did not reproduce from 3,528 frozen source
+masks. Archived original code/protocol/logs/best25/last29 under
+`recoveries/epoch30_binary_target/`. Resize and collate dense occupancy as
+checked uint8 before GPU float conversion. All source unions produce the same
+nearest-resampled values and the CUDA loss/gradients match on all shape classes.
+Resume PID36328 from epoch29 with saved EMA/AdamW and original best25/patience60;
+no new fit or label/split/selection change. Separate SERVICE White/UV changes
+already on disk were recorded for current-config replay; the validation mask
+cleanup code is identical. Inactive classifier files were verified in their
+existing archive. Do not restore them into SERVICE. The new receipt, protocol
+and `resume_verification.json` document recovery. If a later failure occurs,
+check last epoch, lock, real processes and STOP_REQUESTED before acting.
+
+Shifted-tile fit/evaluation is COMPLETE, 91 epochs, best31, patience60. The
+binary-target recovery passed epoch30 and remaining training. Do not resume or
+repeat. On the same 116 val bands including the two edits, epoch26 to epoch31
+ONNX missing/extra is 16/2 to26/5 at2px, 19/1 to28/3 at3px, 38/1 to54/3 at4px.
+At3px, 6 prior misses recovered and 15 new misses appeared (9 November Cam1).
+The two old hard val bands improved 6 to5 misses at3px. Epoch26 still leads
+overall. The 2px validation count from ONNX is26/5; live PT was26/6.
+PT/ONNX2232 numerical parity passed (2229 exact unions). White replay200 and
+both-camera debug parity passed, median0.978x/max1.385x. Frozen data and
+protected current runtime checks passed, process and lock gone, no deployment.
+Dashboard8824, `final_count_review/` and `completion.json` are available.
+
+User requested retaining the previous near-gap checkpoint26 in SERVICE with
+a separate name. Archived ONNX is `SERVICE/config/models/s_p_edge_yolo11s_ep26_20261118.onnx`,
+SHA256 2f8dff4bb355919a8bf4a0e21df331e40ba24a62a41ffeac5b8e626d529b48e2.
+Storage only, explicitly preserve it. Active SERVICE models and selection remain
+as before. Training PT stays at the original near-gap run.
+
+Read-only follow-up `.work/segmentation_epoch26_refinement_20261119/`, dashboard
+8824 `epoch26_refinement/`. On fixed 116 val with two updated Cam2 labels, base
+3px19miss/1extra, one-pass thin/small-area trace recovery15/1, three named
+2px masks and one227.5px² cleanup loss rescued. Two shifted ±32px passes with
+agreement/full two-scan trace yield14/1 at ~3.02x segmentation inference only;
+old hard val misses6 unchanged. x1444 Cam2 band2 remains a merged13px stripe;
+generic brightness split14/30 overcounts. Development trials only, no new fit,
+runtime code edit, config change or activation.
+
+Epoch26 guarded recovery offline `.work/segmentation_epoch26_guarded_mask_20261120/`.
+Retain 0.50 standard caliper pairs, widen supported raw traces to5px, then
+optionally add candidate-mask pairs from the same YOLO forward at0.05 if raw
+trace spans both scans, local brightness supports it, and separation >8px.
+On 116 reused development val, 4px original38/1, guarded widening17/1,
+widening plus weak-confirmed13/1. Independent end-to-end offline verification
+agrees; median paired band ratio1.127x, not whole SERVICE latency. At3px19/1
+to11/1. Unrestricted0.05 gives26/3 and0.01 gives24/9 at4px; guarded0.01
+gives12/3. Short endpoint bridges produced no additional gain on this val.
+Nine points lacked raw support near the original scan; highest tested cutoffs
+restoring an associated mask were0.15 (3),0.05 (2),0.03 (1),0.01 (1), absent
+through0.01 (2). See assessment.json and candidate_verification.json.
+Preserve active runtime and E26 archive; no deployment or additional fit.
+
+## SERVICE epoch 26 activation and White scan endpoints, 20 November 2026
+
+The user selected epoch 26 for SERVICE. `SERVICE/config/config.env` now points
+to `s_p_edge_yolo11s_ep26_20261118.onnx` with minimum caliper peak distance 3 px,
+segmentation confidence 0.10 and scan length 0.95. The prior SERVICE ONNX was
+renamed to `s_p_edge_white_native_hard_20261024_102450_old.onnx` with the same
+SHA256. See MODEL_SELECTION.json and
+`.work/segmentation_epoch26_guarded_mask_20261120/service_activation/`.
+
+White caliper now extends its sample by up to 8 px per side when an original
+endpoint is inside a foreground stripe. It adds only a complete crossing pair
+that does not overlap an original pair. Case 06 (`14112026_164345_9268961_Cam2_White_Raw.png`,
+band2 x1815 y214) recovered its right boundary. On the same 116 development
+bands, epoch 26 at 3 px/0.10 went from 14 misses / 2 extras to 13 / 2, with no
+other pair changes. Both stored White frames pass production/debug parity in
+fresh SERVICE with PLC methods blocked. Remaining points are in
+`replay_3px_010/after_boundary/` under the evaluation directory.
+
+## Nano segmentation comparison, 20 November 2026
+
+User authorized one YOLO11n-seg training and evaluation. The active run is
+`.work/segmentation_nano_20261120/`, dashboard 8827, entrypoint `train.py campaign`.
+Initialize from local official COCO nano weights. Use the same 4,443 nonlegacy
+tile records and 3,416 sampling references per epoch as epoch 26, with the latest
+two Cam2 validation edits and exact split groups. Keep the same NativeUnionLoss
+and 200 epoch cap / patience 60. Rank checkpoints by missed crossings, then extra
+crossings, then raw mask misses at 3 px / confidence 0.10 using the current White
+caliper. One fit. Epoch 26 in SERVICE stays the active model.
+
+Campaign exports ONNX and evaluates both models with and without the selective
+flip on the same 116 validation bands. Also report the eight historical hard
+bands by original split, PT/ONNX mask parity and 16 hardware-off paired White
+CPU timing frames. The same validation bands are development data. Read the
+protocol, real process status, campaign.lock and STOP_REQUESTED before any
+recovery. Never duplicate or restart a completed campaign.
+
+A machine reset interrupted the nano fit in epoch 3. Both Ultralytics
+checkpoints lacked their ZIP directory and could not be loaded. The interrupted
+fit, logs, stale lock and original protocol are retained under
+`recoveries/machine_reset_epoch03/` in the nano run. Restarted from the same
+pretrained weights, frozen data and protocol, with PID 29096 at launch and
+dashboard 8827. The only trainer change adds validated, flushed atomic copies
+`last.durable.pt` and `best.durable.pt` after saves. In a future interruption,
+verify epoch/optimizer/EMA and fit state from the durable copies before any
+resume. Do not restart a live or completed fit.
+
+At epoch 77 validation, Windows briefly denied the atomic status file replace.
+The previous trainer exited before saving epoch 77. Archive and recovery proof
+are in `recoveries/status_lock_epoch77/`. The only repair adds a bounded retry
+for Windows file-share errors. The retry was tested under a temporary read
+lock. Resumed at epoch 77 from saved epoch 76 with optimizer/EMA verified, PID
+30292 at launch, and original best epoch 28 and patience retained.
+
+Nano run COMPLETE: 88 epochs, best 28. On 116 development validation bands
+at 3 px / confidence 0.10, epoch 26 plain/gated scored 13/2 and 7/2 missing/extra;
+nano plain/gated scored 10/3 and 8/3. On the two held-out historical hard bands,
+missing counts were 5/3 and 4/4 respectively. The other six historical bands
+were train diagnostics. PT/ONNX nano union minimum IoU was 0.99810 across all
+116 validation bands. On 16 paired hardware-off White frames with four ONNX CPU
+threads, median whole-flow timings were 1.217/1.397 s for epoch 26 and
+0.787/0.931 s for nano. No hardware timing or independent test claim. ONNX is
+`artifacts/s_p_edge_yolo11n_20261120.onnx` in the run. Dashboard 8827 includes
+`report.html`, `edge_evaluation.json`, `timing.json` and `completion.json`.
+SERVICE still selects epoch 26. Do not resume or repeat this completed fit.
+
+## SERVICE nano activation with White edge recovery, 20 November 2026
+
+User selected nano best epoch 28 as the SERVICE default and requested the
+tested White recovery in the main flow. `SERVICE/config/config.env` selects
+`config/models/s_p_edge_yolo11n_20261120.onnx` with 3 px / confidence 0.10.
+Epoch 26 stays in `SERVICE/config/models/s_p_edge_yolo11s_ep26_20261118.onnx`
+as the hash-verified alternative. Switch `DISK_SEGMENT_MODEL_PATH` and restart
+SERVICE to compare. `WHITE_EDGE_RECOVERY_ENABLED = True` enables the tested
+same-forward 0.05 mask filter and selective horizontal tile retries. False
+enables one pass. White and default Debug share the same implementation.
+
+Verification `.work/service_nano_white_20261120/`: production positions matched
+the offline trial on all 232 scanlines for each model, all 217 tests passed,
+fresh SERVICE configuration loaded nano, and both models passed hardware-off
+White/Debug parity on four stored frames across Cam1 and Cam2. Previous config
+and model selection metadata are backed up under that verification directory.

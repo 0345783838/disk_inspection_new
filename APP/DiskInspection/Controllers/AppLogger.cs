@@ -1,12 +1,10 @@
 ﻿using DiskInspection.Models;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using NLog;
+using LogLevel = DiskInspection.Models.LogLevel;
 
 namespace DiskInspection.Controllers
 {
@@ -29,34 +27,29 @@ namespace DiskInspection.Controllers
             Logs = new ObservableCollection<LogItem>();
         }
 
-        public void Log(LogLevel level, string message, string source)
+        public void Log(LogLevel level, string message, string source, Exception exception = null)
         {
-            if (Application.Current == null)
-                return;
+            var fileLevel = level == LogLevel.Error ? NLog.LogLevel.Error
+                : level == LogLevel.Warning ? NLog.LogLevel.Warn : NLog.LogLevel.Info;
+            LogManager.GetLogger(source).Log(new LogEventInfo(fileLevel, source, message) { Exception = exception });
 
-            Application.Current.Dispatcher.Invoke(new Action(() =>
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            ScopeContext.TryGetProperty("cycle", out var cycle);
+            var item = new LogItem(level, cycle == null ? source : $"{source} {cycle}", message);
+            dispatcher.BeginInvoke(new Action(() =>
             {
                 if (Logs.Count >= MAX_LOG)
-                {
                     Logs.RemoveAt(0);
-                }
-
-                Logs.Add(new LogItem(level, source, message));
-            }));
+                Logs.Add(item);
+            }), DispatcherPriority.Background);
         }
-        public void LogSafe(LogLevel level, string message, string source)
+
+        public void LogSafe(LogLevel level, string message, string source) => Log(level, message, source);
+
+        public void Debug(string message, string source)
         {
-            var dispatcher = Application.Current != null
-                ? Application.Current.Dispatcher
-                : Dispatcher.CurrentDispatcher;
-
-            dispatcher.Invoke(() =>
-            {
-                if (Logs.Count >= MAX_LOG)
-                    Logs.RemoveAt(0);
-
-                Logs.Add(new LogItem(level, source, message));
-            });
+            LogManager.GetLogger(source).Debug(message);
         }
 
         // Helper methods (C# 7.3 vẫn OK)
@@ -75,9 +68,9 @@ namespace DiskInspection.Controllers
             Log(LogLevel.Warning, message, source);
         }
 
-        public void Error(string message, string source)
+        public void Error(string message, string source, Exception exception = null)
         {
-            Log(LogLevel.Error, message, source);
+            Log(LogLevel.Error, message, source, exception);
         }
     }
 }

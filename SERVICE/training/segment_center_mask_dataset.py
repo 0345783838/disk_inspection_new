@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2,numpy as np,torch
 from ultralytics.data.dataset import YOLODataset
 from ultralytics.data.augment import Compose,LetterBox,RandomHSV,Format
+from ultralytics.utils.ops import segments2boxes
 from segment_supplementary_core import read_json
 
 class CenterMaskFormat(Format):
@@ -29,6 +30,22 @@ class CenterMaskFormat(Format):
 class CenterYOLODataset(YOLODataset):
  def __init__(self,*args,**kw):
   run=Path(os.environ['SEGMENT_SUPPLEMENT_ROOT']);rows=read_json(run/'dataset/manifest.json');self.exact_records={str(Path(r['image']).resolve()):r for r in rows if r.get('target_masks')};super().__init__(*args,**kw)
+ def get_labels(self):
+  labels=super().get_labels();self.restored_duplicate_boxes=[]
+  for label in labels:
+   record=self.exact_records.get(str(Path(label['im_file']).resolve()))
+   if record is None:continue
+   expected=record['objects']
+   if len(label['cls'])==expected:continue
+   # Ultralytics deduplicates by class+bbox, even when the exact masks differ.
+   # Reviewed overlapping masks are valid: restore their original proxy records
+   # without touching the authoritative NPZ masks, union pixels, or source files.
+   original=[np.asarray(line.split(),np.float32) for line in Path(record['label']).read_text().splitlines() if line.strip()]
+   assert len(original)==expected,(record['id'],len(original),expected)
+   segments=[line[1:].reshape(-1,2) for line in original]
+   label.update(cls=np.asarray([line[:1] for line in original],np.float32),bboxes=segments2boxes(segments).astype(np.float32),segments=segments,normalized=True,bbox_format='xywh')
+   self.restored_duplicate_boxes.append({'id':record['id'],'instances':expected})
+  return labels
  def build_transforms(self,hyp=None):
   # All geometric variation is precomputed/source-bound. Do not infer mask warps
   # from polygon proxy paths: image and exact masks share only load_image + LetterBox.

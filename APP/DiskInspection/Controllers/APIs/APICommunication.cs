@@ -4,6 +4,7 @@ using Emgu.CV.Structure;
 using Newtonsoft.Json;
 using RestSharp;
 using System;
+using System.Diagnostics;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -70,8 +71,12 @@ namespace DiskInspection.Controllers.APIs
                 request.AddParameter(parameter, JsonConvert.SerializeObject(payload), ParameterType.GetOrPost);
             using (var client = new RestClient(new RestClientOptions(url) { Timeout = TimeSpan.FromMilliseconds(timeout) }))
             {
+                var elapsed = Stopwatch.StartNew();
+                Logger.Debug($"POST {endpoint} started (timeout {timeout} ms).");
                 var response = await client.ExecuteAsync(request, token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
+                Logger.Debug($"POST {endpoint}: HTTP {(int)response.StatusCode}, {response.ResponseStatus}, " +
+                    $"{elapsed.ElapsedMilliseconds} ms.");
                 if (response.StatusCode != HttpStatusCode.OK || response.ErrorException != null)
                     throw new InvalidOperationException($"AI request {endpoint} failed ({response.ResponseStatus}, HTTP {(int)response.StatusCode}).", response.ErrorException);
                 var result = JsonConvert.DeserializeObject<T>(response.Content ?? "null");

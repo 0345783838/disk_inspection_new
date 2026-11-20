@@ -200,6 +200,7 @@
     <Compile Include="Controllers\ImageSaver.cs" />
     <Compile Include="Controllers\MainController.cs" />
     <Compile Include="Controllers\InspectionSequence.cs" />
+    <Compile Include="Controllers\OfflineInspectionFrames.cs" />
     <Compile Include="Controllers\InspectionImageWriter.cs" />
     <Compile Include="Controllers\PLC\PlcController.cs" />
     <Compile Include="Controllers\PLC\PlcTriggerReset.cs" />

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class DataResponse(BaseModel):
+    CaliperGapChecks: List[dict] = Field(default_factory=list)
     InferredSlots: List[dict] = Field(default_factory=list)
     PointGeometryStatus: Optional[str] = None
     Result: int = Field(default=1, strict=True, ge=0, le=2)  # 0/1/2 - ok/ng/warning
@@ -32,6 +33,7 @@ class DataResponseUv(BaseModel):
 
 
 class DataDebugResponse(BaseModel):
+    CaliperGapChecks: List[dict] = Field(default_factory=list)
     InferredSlots: List[dict] = Field(default_factory=list)
     PointGeometryStatus: Optional[str] = None
     Result: int = Field(default=1, strict=True, ge=0, le=2)  # 0/1/2 - ok/ng/warning

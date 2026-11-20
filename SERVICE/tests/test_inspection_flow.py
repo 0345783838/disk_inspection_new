@@ -91,6 +91,7 @@ class PipelineTests(unittest.TestCase):
         s.num_disk = 25
         s.min_disk_distance, s.max_disk_distance = 1, 9999
         s.min_disk_area = 0
+        s.max_caliper_gap_delta_px = 10
         s.uv_disk_lower_threshold, s.uv_disk_upper_threshold = (107, 35, 40), (119, 150, 250)
         s.uv_min_disk_area = 0
         self.rows = [
@@ -126,6 +127,111 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(prod.ResImg, debug.FinalImg)
                 for field in ['CropBox', 'UvBox1', 'UvBox2', 'Mid1', 'Mid2']:
                     self.assertEqual(getattr(prod, field), getattr(debug, field))
+
+    def _caliper_measurement(self, xs, y):
+        return {'pairs': [{'e1': {'point': (x-5, y)}, 'e2': {'point': (x+5, y)}} for x in xs]}
+
+    def _segment_mock_measurements(self, measurements):
+        # Keep the synthetic mask consistent with the mocked disk identities.
+        call = 0
+        def segment(image, *args):
+            nonlocal call
+            index = (call % 2) * 2
+            call += 1
+            mask = np.zeros(image.shape[:2], np.uint8)
+            for a, b in zip(measurements[index]['pairs'], measurements[index+1]['pairs']):
+                first = np.mean([a['e1']['point'], a['e2']['point']], axis=0).astype(int)
+                second = np.mean([b['e1']['point'], b['e2']['point']], axis=0).astype(int)
+                cv2.line(mask, tuple(first), tuple(second), 255, 7)
+            return mask, None
+        self.service.disk_segmentor_yolo.segment_large_image_debug = segment
+
+    def test_crossing_gate_at_boundary_and_above_for_both_bands(self):
+        for band in (0, 1):
+            for delta in (10, 11):
+                for label in ('ok', 'no_disk'):
+                    with self.subTest(band=band, delta=delta, label=label):
+                        self.label = label
+                        xs = [30, 75, 120, 165, 210]
+                        shifted = [30, 75, 120+delta, 165, 210]
+                        measurements = [self._caliper_measurement(xs, 10),
+                                        self._caliper_measurement(xs, 5),
+                                        self._caliper_measurement(xs, 5),
+                                        self._caliper_measurement(xs, 10)]
+                        measurements[band*2+1] = self._caliper_measurement(shifted, 5 if band == 0 else 10)
+                        self._segment_mock_measurements(measurements)
+                        with patch.object(self.service.caliper, 'measure_with_params', side_effect=measurements*2):
+                            prod = self.service.check_disk_white(self.image.copy())
+                            debug = self.service.check_disk_debug(self.image.copy(), self.service._default_white_params())
+                        expected = 1 if delta > 10 else (0 if label == 'ok' else 2)
+                        self.assertEqual(prod.Result, expected)
+                        self.assertEqual(debug.Result, prod.Result)
+                        self.assertEqual(debug.ErrorDesc, prod.ErrorDesc)
+                        self.assertEqual(debug.FinalImg, prod.ResImg)
+                        self.assertEqual(debug.CaliperGapChecks, prod.CaliperGapChecks)
+                        check = prod.CaliperGapChecks[band]
+                        self.assertEqual(check['max_delta_px'], delta)
+                        self.assertEqual(check['calipers'], [band*2+1, band*2+2])
+                        if expected == 1:
+                            self.assertEqual(prod.ErrorCode, 'ERROR_001')
+                            self.assertIn('Đĩa quá chéo', prod.ErrorDesc)
+
+    def test_active_threshold_controls_production_and_legacy_debug(self):
+        self.service.max_caliper_gap_delta_px = 12
+        normal = [30, 75, 120, 165, 210]
+        tilted = [30, 75, 131, 165, 210]
+        measurements = [self._caliper_measurement(xs, y) for xs, y in
+                        [(normal, 10), (tilted, 5), (normal, 5), (normal, 10)]]
+        self._segment_mock_measurements(measurements)
+        with patch.object(self.service.caliper, 'measure_with_params', side_effect=measurements*2):
+            prod = self.service.check_disk_white(self.image.copy())
+            debug = self.service.check_disk_debug(self.image.copy(), self.service._default_white_params())
+        self.assertEqual(prod.Result, 0)
+        self.assertEqual(debug.Result, 0)
+        self.assertEqual(prod.CaliperGapChecks[0]['threshold_px'], 12)
+        self.assertEqual(debug.CaliperGapChecks, prod.CaliperGapChecks)
+
+    def test_missing_scanline_disk_skips_only_unmatched_adjacent_intervals(self):
+        normal = [30, 75, 120, 165, 210]
+        measurements = [self._caliper_measurement(xs, y) for xs, y in
+                        [(normal, 10), (normal[1:], 5), (normal, 5), (normal, 10)]]
+        with patch.object(self.service.caliper, 'measure_with_params', side_effect=measurements):
+            result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual(result.Result, 0)
+        self.assertEqual(result.CaliperGapChecks[0]['unmatched_points'], [1, 0])
+        self.assertEqual(result.CaliperGapChecks[0]['skipped_gaps'], [1, 0])
+        self.assertNotIn('Đĩa quá chéo', result.ErrorDesc)
+        self.assertTrue(result.CropBox)
+
+    def test_uv_receives_the_larger_white_caliper_count_per_band(self):
+        full = [30, 75, 120, 165, 210]
+        short = full[1:]
+        measurements = [self._caliper_measurement(xs, y) for xs, y in
+                        [(short, 10), (full, 5), (short, 5), (full, 10)]]
+        self._segment_mock_measurements(measurements)
+        with patch.object(self.service.caliper, 'measure_with_params', side_effect=measurements * 2):
+            prod = self.service.check_disk_white(self.image.copy())
+            debug = self.service.check_disk_debug(self.image.copy(), self.service._default_white_params())
+        for response in (prod, debug):
+            first, second = map(ast.literal_eval, (response.Mid1, response.Mid2))
+            self.assertEqual(first, [[x, 5] for x in full])
+            self.assertEqual(second, [[x, 10] for x in full])
+            self.assertEqual([check['counts'] for check in response.CaliperGapChecks],
+                             [[4, 5], [4, 5]])
+            self.assertEqual([check['count_caliper'] for check in response.CaliperGapChecks], [2, 4])
+
+    def test_equal_white_counts_keep_the_primary_midpoints(self):
+        result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual([check['count_caliper'] for check in result.CaliperGapChecks], [1, 3])
+
+    def test_no_corresponding_disks_reports_measurement_failure(self):
+        self.service.disk_segmentor_yolo.segment_large_image_debug = lambda image, *args: (
+            np.zeros(image.shape[:2], np.uint8), None)
+        result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual(result.Result, 1)
+        self.assertEqual(result.CaliperGapChecks[0]['reason'], 'fewer_than_two_disks')
+        self.assertNotIn('Đĩa quá chéo', result.ErrorDesc)
+        self.assertIn('Không ghép được', result.ErrorDesc)
 
     def test_white_uv_bands_follow_both_faces_of_middle_support(self):
         result = self.service.check_disk_white(self.image.copy())

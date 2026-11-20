@@ -55,8 +55,7 @@ namespace DiskInspection.Controllers
             }
             catch (Exception ex)
             {
-                // log nếu cần
-                Console.WriteLine(ex.ToString());
+                AppLogger.Instance.Error($"Cannot write {title}: {ex.Message}", "SAVE");
             }
             return false;
         }

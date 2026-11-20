@@ -284,7 +284,9 @@ class OnnxSegmentor:
     def segment_objects_debug(self, image, conf_threshold, iou_threshold):
         input_tensor, img_h, img_w = self.prepare_input(image)
         outputs = self.inference(input_tensor)
+        return self._decode_segment(outputs, img_h, img_w, conf_threshold, iou_threshold)
 
+    def _decode_segment(self, outputs, img_h, img_w, conf_threshold, iou_threshold):
         boxes, scores, class_ids, mask_preds = self.process_box_output_debug(
             outputs[0], img_h, img_w, conf_threshold, iou_threshold
         )
@@ -294,6 +296,21 @@ class OnnxSegmentor:
         )
 
         return boxes, scores, class_ids, masks
+
+    def segment_large_image_at_thresholds(self, image, thresholds, iou_threshold):
+        """Decode several thresholded masks from the same tile forwards."""
+        height, width = image.shape[:2]
+        unions = {threshold: np.zeros((height, width), np.uint8) for threshold in thresholds}
+        crops, positions = self.split_image(image)
+        for index, (crop, (left, right)) in enumerate(zip(crops, positions)):
+            tensor, tile_height, tile_width = self.prepare_input(crop)
+            outputs = self.inference(tensor)
+            for threshold, union in unions.items():
+                _, _, _, masks = self._decode_segment(outputs, tile_height, tile_width, threshold, iou_threshold)
+                if len(masks):
+                    merged = np.maximum.reduce(masks) * 255
+                    self.paste_tile_mask(union, merged, left, right, index)
+        return unions
 
     def split_image(self, image):
         H, W = image.shape[:2]

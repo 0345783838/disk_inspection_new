@@ -6,6 +6,8 @@ from src.dtos.meta import DataResponse, ErrorCode, DataDebugResponse, DataRespon
     InspectionState, ClassifyResult, Params
 from src.service.base_service import BaseService
 from src.tools.slot_geometry import complete_slot_rows, filter_off_grid_extras
+from src.tools.caliper_gap_delta import compare_caliper_gaps
+from src.tools.white_edge_recovery import WEAK_CONFIDENCE, recover_white_pairs
 import base64
 import ast
 import logging
@@ -184,6 +186,30 @@ class DiskCheckingService(BaseService):
             )
 
         return results, distance_list, [x.tolist() for x in mids]
+
+    @staticmethod
+    def visualize_caliper_gap_delta(image, mids_1, mids_2, check):
+        """Mark the same failing disk interval on both measurement lines."""
+        color = (0, 180, 0) if check['status'] == 'ok' else (0, 0, 255)
+        if check['status'] == 'invalid':
+            label = 'CALIPER DELTA: INVALID ' + check['reason']
+        else:
+            label = f"CALIPER DELTA: {check['max_delta_px']:.1f}/{check['threshold_px']:g}px"
+            if any(check['skipped_gaps']):
+                label += ' PARTIAL'
+        cv2.putText(image, label, (5, 15), cv2.FONT_HERSHEY_SIMPLEX, .4, color, 1, cv2.LINE_AA)
+        first = sorted(mids_1, key=lambda p: p[0])
+        second = sorted(mids_2, key=lambda p: p[0])
+        for gap in check['gaps']:
+            if gap['passed']:
+                continue
+            i = gap['gap_index'] - 1
+            j = gap['other_gap_index'] - 1
+            points = np.array([first[i], first[i+1], second[j+1], second[j]], dtype=np.int32)
+            cv2.polylines(image, [points], True, color, 2)
+            center = points.mean(axis=0).astype(int)
+            cv2.putText(image, f"D={gap['delta_px']:.1f}", tuple(center),
+                        cv2.FONT_HERSHEY_SIMPLEX, .4, color, 1, cv2.LINE_AA)
 
     @staticmethod
     def visualize_edge_spacing_uv(
@@ -813,6 +839,39 @@ class DiskCheckingService(BaseService):
     def check_disk_debug(self, image, params):
         return self._check_white(image, params, debug=True)
 
+    def _measure_white_band(self, image, params, *, bottom_first=False):
+        height, width = image.shape[:2]
+        scans = (int(height*.25), int(height*.75))
+        segmentor = self.disk_segmentor_yolo
+        confidence, iou = params.segment_threshold, params.segment_iou
+        recover = (getattr(self, 'white_edge_recovery_enabled', False)
+                   and WEAK_CONFIDENCE < confidence == segmentor.conf_threshold
+                   and iou == segmentor.iou_threshold and segmentor.tile_merge == 'core'
+                   and scans[0] != scans[1])
+
+        def clean(mask):
+            return self.clean_mask(mask, params.disk_min_area)
+
+        def measure(mask, center):
+            return self.caliper.measure_white_mask(mask, center, params.caliper_min_edge_distance,
+                                                   params.caliper_max_edge_distance, params.caliper_length_rate,
+                                                   params.caliper_thickness_list)
+
+        if recover:
+            masks = segmentor.segment_large_image_at_thresholds(image, (confidence, WEAK_CONFIDENCE), iou)
+            original = masks[confidence]
+            cleaned = clean(original.copy())
+        else:
+            original, _ = segmentor.segment_large_image_debug(image, confidence, iou)
+            cleaned = clean(original)
+        scan_order = scans[::-1] if bottom_first else scans
+        measured = {y: measure(cleaned, (width//2, y)) for y in scan_order}
+        if recover:
+            measured = recover_white_pairs(segmentor, image, original, masks[WEAK_CONFIDENCE], scans, measured,
+                                           clean, measure, params.caliper_length_rate, self.caliper.max_pairs,
+                                           confidence, iou)
+        return cleaned, measured
+
     def _white_failure(self, image, debug, geometry_status=None):
         encoded = self._convert_2_base64(image)
         error = dict(Result=InspectionState.NG, ErrorCode=ErrorCode.ERR_NUM_DISK[0],
@@ -923,11 +982,8 @@ class DiskCheckingService(BaseService):
         except ValueError:
             return self._white_failure(image, debug)
 
-        mask_seg_1, _ = self.disk_segmentor_yolo.segment_large_image_debug(crop_seg_1, params.segment_threshold, params.segment_iou)
-        mask_seg_2, _ = self.disk_segmentor_yolo.segment_large_image_debug(crop_seg_2, params.segment_threshold, params.segment_iou)
-
-        mask_seg_1 = self.clean_mask(mask_seg_1, params.disk_min_area)
-        mask_seg_2 = self.clean_mask(mask_seg_2, params.disk_min_area)
+        mask_seg_1, band_1_measurements = self._measure_white_band(crop_seg_1, params, bottom_first=True)
+        mask_seg_2, band_2_measurements = self._measure_white_band(crop_seg_2, params)
 
         segment_image = None
         if debug:
@@ -940,10 +996,8 @@ class DiskCheckingService(BaseService):
         center_2 = mask_seg_1.shape[1] // 2, int(mask_seg_1.shape[0] * 0.25)
         center_3 = mask_seg_2.shape[1] // 2, int(mask_seg_2.shape[0] * 0.25)
         center_4 = mask_seg_2.shape[1] // 2, int(mask_seg_2.shape[0] * 0.75)
-        caliper_res_1 = self.caliper.measure_with_params(mask_seg_1, center_1, params.caliper_min_edge_distance, params.caliper_max_edge_distance, params.caliper_length_rate, params.caliper_thickness_list)
-        caliper_res_2 = self.caliper.measure_with_params(mask_seg_1, center_2, params.caliper_min_edge_distance, params.caliper_max_edge_distance, params.caliper_length_rate, params.caliper_thickness_list)
-        caliper_res_3 = self.caliper.measure_with_params(mask_seg_2, center_3, params.caliper_min_edge_distance, params.caliper_max_edge_distance, params.caliper_length_rate, params.caliper_thickness_list)
-        caliper_res_4 = self.caliper.measure_with_params(mask_seg_2, center_4, params.caliper_min_edge_distance, params.caliper_max_edge_distance, params.caliper_length_rate, params.caliper_thickness_list)
+        caliper_res_1, caliper_res_2 = (band_1_measurements[center[1]] for center in (center_1, center_2))
+        caliper_res_3, caliper_res_4 = (band_2_measurements[center[1]] for center in (center_3, center_4))
 
         # Visualize result:
         self.draw_boxes(crop_img, ng_boxes, (0, 0, 255), ClassifyResult.NG)
@@ -966,6 +1020,23 @@ class DiskCheckingService(BaseService):
                                                                         params.disk_min_distance,
                                                                         params.disk_max_distance)
 
+        # Compare the same adjacent disks within each band: 1 vs 2, then 3 vs 4.
+        # Shared by production and debug, including older debug clients which do
+        # not send this setting. The active SERVICE config remains authoritative.
+        delta_limit = getattr(self, 'max_caliper_gap_delta_px', 20.0)
+        gap_checks = []
+        white_mids = []
+        for band, crop, mask, first, second, lines in (
+                (1, crop_seg_1, mask_seg_1, mids_1, mids_2, [1, 2]),
+                (2, crop_seg_2, mask_seg_2, mids_3, mids_4, [3, 4])):
+            check = compare_caliper_gaps(first, second, delta_limit, mask=mask)
+            count_index = int(len(second) > len(first))
+            white_mids.append((first, second)[count_index])
+            check.update(band=band, calipers=lines, count_caliper=lines[count_index])
+            gap_checks.append(check)
+            self.visualize_caliper_gap_delta(crop, first, second, check)
+        res_gap_delta = all(check['status'] == 'ok' for check in gap_checks)
+
         # Summary result
         res_classification = InspectionState.NG
         if len(ng_boxes) == 0 and len(no_disk_boxes) == 0:
@@ -986,12 +1057,12 @@ class DiskCheckingService(BaseService):
         sum_res = InspectionState.NG
         error_code = ErrorCode.ABNORMAL[0]
         error_desc = ErrorCode.ABNORMAL[1]
-        if res_classification == InspectionState.OK and res_spacing and res_count:
+        if res_classification == InspectionState.OK and res_spacing and res_count and res_gap_delta:
             sum_res = InspectionState.OK
             error_code = ErrorCode.PASS[0]
             error_desc = ErrorCode.PASS[1]
         else:
-            if res_classification == InspectionState.WARNING and res_spacing and res_count:
+            if res_classification == InspectionState.WARNING and res_spacing and res_count and res_gap_delta:
                 sum_res = InspectionState.WARNING
                 error_code = ErrorCode.WARNING_NUM_DISK[0]
                 error_desc = ErrorCode.WARNING_NUM_DISK[1]
@@ -1000,6 +1071,14 @@ class DiskCheckingService(BaseService):
                 error_code = ErrorCode.ABNORMAL[0]
                 error_desc = ErrorCode.ABNORMAL[1]
 
+        # Keep the existing abnormal PLC/API code; expose the specific reason to
+        # the operator and retain all existing NG causes in the final decision.
+        if not res_gap_delta:
+            if any(check['status'] == 'ng' for check in gap_checks):
+                error_desc += ' Đĩa quá chéo: chênh khoảng cách hai caliper vượt ngưỡng.'
+            if any(check['status'] == 'invalid' for check in gap_checks):
+                error_desc += ' Không ghép được cặp đĩa giữa hai caliper để kiểm tra độ chéo.'
+
         try:
             min_disk_distance = min(dis_list_1 + dis_list_2 + dis_list_3 + dis_list_4)
             max_disk_distance = max(dis_list_1 + dis_list_2 + dis_list_3 + dis_list_4)
@@ -1007,16 +1086,20 @@ class DiskCheckingService(BaseService):
             min_disk_distance = 0
             max_disk_distance = 0
 
+        # Mid1/Mid2 carry the fuller scan of each band to the UV comparator.
+        mid_1, mid_2 = map(str, white_mids)
         if debug:
             return DataDebugResponse(Result=sum_res, ErrorCode=error_code, ErrorDesc=error_desc,
+                                     CaliperGapChecks=gap_checks,
                                      InferredSlots=inferred_slots, PointGeometryStatus=geometry_status,
                                      DetectImg=self._convert_2_base64(detect_image),
                                      SegmentImg=self._convert_2_base64(segment_image),
                                      FinalImg=self._convert_2_base64(crop_img),
                                      CropBox=str(crop_quad.tolist()), UvBox1=str(uv_box_1.tolist()),
-                                     UvBox2=str(uv_box_2.tolist()), Mid1=str(mids_1), Mid2=str(mids_3))
+                                     UvBox2=str(uv_box_2.tolist()), Mid1=mid_1, Mid2=mid_2)
 
         return DataResponse(Result=sum_res,
+                            CaliperGapChecks=gap_checks,
                             InferredSlots=inferred_slots, PointGeometryStatus=geometry_status,
                             ErrorCode=error_code,
                             ErrorDesc=error_desc,
@@ -1026,8 +1109,8 @@ class DiskCheckingService(BaseService):
                             CropBox=str(crop_quad.tolist()),
                             UvBox1=str(uv_box_1.tolist()),
                             UvBox2=str(uv_box_2.tolist()),
-                            Mid1=str(mids_1),
-                            Mid2=str(mids_3),
+                            Mid1=mid_1,
+                            Mid2=mid_2,
                             )
 
     def update_boxes_after_crop(self, middle_boxes, crop_rect):
