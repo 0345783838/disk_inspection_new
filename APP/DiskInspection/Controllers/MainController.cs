@@ -67,6 +67,7 @@ namespace DiskInspection.Controllers
         // ─── Constants ───────────────────────────────────────────────────────────
         private const int PlcPollIntervalMs = 50;
         private const int StatusPollIntervalMs = 2000;
+        private const bool BypassNgAbnormal = true; // Temporary PLC result override.
         private const string LicensePath = @"plugin\license.dat";
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -440,11 +441,15 @@ namespace DiskInspection.Controllers
         private void SendResultToPlc(InspectionResult status, string cam1UvErrorCode, string cam2UvErrorCode)
         {
             // Warning sends OK; mixing takes priority among NG results.
-            bool ok = status != InspectionResult.Failed;
-            bool mixing = !ok && (cam1UvErrorCode == ErrorCode.ERROR_003 || cam2UvErrorCode == ErrorCode.ERROR_003);
-            string signal = ok ? "OK" : mixing ? "NG_MIXING" : "NG_ABNORMAL";
+            bool failed = status == InspectionResult.Failed;
+            bool mixing = failed && (cam1UvErrorCode == ErrorCode.ERROR_003 || cam2UvErrorCode == ErrorCode.ERROR_003);
+            bool bypassed = failed && !mixing && BypassNgAbnormal;
+            bool sendOk = !failed || bypassed;
+            string signal = sendOk ? "OK" : mixing ? "NG_MIXING" : "NG_ABNORMAL";
+            if (bypassed)
+                AppLogger.Instance.Warning("Temporary PLC bypass: NG_ABNORMAL → OK.", "PLC");
             var elapsed = Stopwatch.StartNew();
-            bool acknowledged = ok
+            bool acknowledged = sendOk
                 ? PlcController.OnOkSignal(_param.ApiUrlCom)
                 : mixing
                     ? PlcController.OnErrorMixing(_param.ApiUrlCom)
