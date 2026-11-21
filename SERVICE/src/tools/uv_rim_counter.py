@@ -4,6 +4,7 @@ Blue HSV halos admit adjacent low-saturation bright cores. A fan-shaped warp
 aligns the long primary rims; reversed/short reflected arcs do not align.
 Count ridge tracks, not the two boundaries of a binary strip. No slot/count prior.
 """
+from bisect import bisect_left
 from dataclasses import dataclass, fields
 from pathlib import Path
 import math
@@ -27,6 +28,7 @@ class RimSettings:
     min_separation: int = 5
     core_saturation_max: int = 35
     core_value_min: int = 110
+    min_ridge_width_px: float = 0.
 
     def __post_init__(self):
         limits = {'hue_low': 179, 'hue_high': 179, 'saturation_low': 255,
@@ -38,7 +40,7 @@ class RimSettings:
                 raise ValueError(f'UV_RIM_{name.upper()} must be an integer in 0..{maximum}')
         if self.hue_low > self.hue_high:
             raise ValueError('UV_RIM_HUE_LOW must not exceed UV_RIM_HUE_HIGH')
-        for name in ('weak_contrast', 'strong_contrast'):
+        for name in ('weak_contrast', 'strong_contrast', 'min_ridge_width_px'):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f'UV_RIM_{name.upper()} must be finite and nonnegative')
@@ -215,6 +217,65 @@ def compare_bright_ridges(value, first, second, contrast):
     return shared * 2 > fewer_bright_rows, separate
 
 
+def ridge_width(value, strong, track_x, min_contrast):
+    """Median horizontal width at half peak contrast on the original UV band."""
+    height, width = value.shape
+    centers = np.rint(track_x).astype(int)
+    rows = np.flatnonzero((centers >= 13) & (centers < width - 13))
+    search = centers[rows, None] + np.arange(-3, 4)
+    is_strong = strong[rows[:, None], search] != 0
+    peaks = search[np.arange(len(rows)), np.argmax(
+        np.where(is_strong, value[rows[:, None], search], -1), axis=1)]
+    profile = value[rows[:, None], peaks[:, None] + np.arange(-10, 11)].astype(float)
+    peak = profile[:, 10]
+    background = np.median(profile, axis=1)
+    contrast = peak - background
+    half = background + contrast * .5
+    below = profile <= half[:, None]
+    left = np.max(np.where(below[:, :10], np.arange(10), -1), axis=1)
+    right = np.min(np.where(below[:, 11:], np.arange(11, 21), 21), axis=1)
+    valid = np.flatnonzero(is_strong.any(axis=1) & (contrast >= min_contrast) &
+                           (contrast > 0) & (left >= 0) & (right < 21))
+    if len(valid) < max(5, math.ceil(.25 * height)):
+        return None
+    left, right, half = left[valid], right[valid], half[valid]
+    left_low, left_high = profile[valid, left], profile[valid, left + 1]
+    right_low, right_high = profile[valid, right], profile[valid, right - 1]
+    x_left = left + (half - left_low) / (left_high - left_low)
+    x_right = right - (half - right_low) / (right_high - right_low)
+    return float(np.median(x_right - x_left))
+
+
+def reject_thin_secondary_ridges(tracks, value, strong, settings):
+    """Reject thin ridges only where neighboring broad rims support that interpretation."""
+    limit = settings.min_ridge_width_px
+    for track in tracks:
+        track['width_px'] = ridge_width(value, strong, np.asarray(track['points'])[:, 0],
+                                        settings.strong_contrast)
+    broad = [t for t in tracks if t['width_px'] is not None and t['width_px'] >= limit]
+    if len(broad) < 5:
+        # Sparse bands provide too little evidence to decide whether a thin rim is secondary.
+        return tracks, []
+
+    anchors = [t['center_x'] for t in broad]
+    spacing = float(np.median(np.diff(anchors)))
+    kept, rejected = [], []
+    for track in tracks:
+        width = track['width_px']
+        x = track['center_x']
+        right = bisect_left(anchors, x)
+        if width is not None and width < limit and 0 < right < len(anchors):
+            left_gap, right_gap = x - anchors[right - 1], anchors[right] - x
+            neighbor_width = min(broad[right - 1]['width_px'], broad[right]['width_px'])
+            if (2 * width <= neighbor_width and left_gap + right_gap <= 1.6 * spacing
+                    and min(left_gap, right_gap) <= .6 * spacing):
+                track['reasons'] = ['thin secondary ridge']
+                rejected.append(track)
+                continue
+        kept.append(track)
+    return kept, rejected
+
+
 def count_uv_rims(image, band, settings=None):
     if image is None or image.ndim != 3 or min(image.shape[:2]) < 8 or band not in (1, 2):
         raise ValueError('Expected a BGR UV band image and band 1/2')
@@ -224,7 +285,8 @@ def count_uv_rims(image, band, settings=None):
     _, a, b, curve, mx, my, scale, dy = alignment
     aligned_weak = cv2.remap(weak, mx, my, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT)
     aligned_strong = cv2.remap(strong, mx, my, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT)
-    aligned_value = cv2.remap(cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 2], mx, my, cv2.INTER_LINEAR)
+    value = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 2]
+    aligned_value = cv2.remap(value, mx, my, cv2.INTER_LINEAR)
     height, width = weak.shape
     wide = cv2.dilate(aligned_weak, np.ones((1, 3), np.uint8)) > 0
     profile = wide.mean(axis=0).astype(np.float32)
@@ -299,6 +361,9 @@ def count_uv_rims(image, band, settings=None):
         track['reasons'] = ['duplicate ridge']
         rejected.append(track)
     tracks = sorted(unique, key=lambda t: t['center_x'])
+    if settings.min_ridge_width_px > 0:
+        tracks, thin = reject_thin_secondary_ridges(tracks, value, strong, settings)
+        rejected.extend(thin)
     kept = np.zeros_like(weak)
     overlay = image.copy()
     for index, track in enumerate(tracks, 1):

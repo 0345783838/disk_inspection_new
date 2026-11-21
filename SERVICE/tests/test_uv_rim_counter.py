@@ -25,6 +25,25 @@ class UvRimCounterTests(unittest.TestCase):
             result, _ = count_uv_rims(image_with_rims([50, 115, 200], thickness=thickness), 1)
             self.assertEqual(result['count'], 3)
 
+    def test_bright_thin_secondary_ridge_is_rejected_between_broad_rims(self):
+        image = image_with_rims([35, 95, 155, 215, 275], thickness=5)
+        image[:, 63] = image[0, 36]
+        baseline, _ = count_uv_rims(image, 1, RimSettings())
+        filtered, _ = count_uv_rims(image, 1, RimSettings(min_ridge_width_px=2.5))
+        rejected = [t for t in filtered['rejected'] if t['reasons'] == ['thin secondary ridge']]
+        self.assertEqual((baseline['count'], filtered['count']), (6, 5))
+        self.assertEqual(len(rejected), 1)
+        self.assertLessEqual(abs(rejected[0]['center_x'] - 63), 2)
+        self.assertAlmostEqual(rejected[0]['width_px'], 1.)
+
+    def test_preserves_a_thin_rim_in_an_open_slot_or_sparse_band(self):
+        settings = RimSettings(min_ridge_width_px=2.5)
+        image = image_with_rims([35, 95, 215, 275, 335], width=380, thickness=5)
+        image[:, 155] = image[0, 36]
+        full, _ = count_uv_rims(image, 1, settings)
+        sparse, _ = count_uv_rims(image_with_rims([80, 160]), 1, settings)
+        self.assertEqual((full['count'], sparse['count']), (6, 2))
+
     def test_count_is_not_forced_to_25(self):
         for xs in ([], [80], [50, 150], [40, 100, 160, 220]):
             result, _ = count_uv_rims(image_with_rims(xs), 1)

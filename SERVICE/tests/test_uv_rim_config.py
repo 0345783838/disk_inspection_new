@@ -29,7 +29,8 @@ class UvRimConfigTests(unittest.TestCase):
         values = dict(hue_low=99, hue_high=132, saturation_low=10, value_low=25,
                       strong_value=80, weak_contrast=3.5, strong_contrast=10.5,
                       min_coverage=.55, min_span=.75, min_strong_coverage=.4,
-                      min_separation=7, core_saturation_max=40, core_value_min=130)
+                      min_separation=7, core_saturation_max=40, core_value_min=130,
+                      min_ridge_width_px=2.5)
         self.write_config(values)
         actual = load_rim_settings(self.path)
         self.assertEqual(actual, RimSettings(**values))
@@ -76,6 +77,7 @@ class UvRimConfigTests(unittest.TestCase):
                             ({'hue_high': 180}, 'HUE_HIGH'),
                             ({'hue_low': 150, 'hue_high': 100}, 'HUE_LOW'),
                             ({'min_separation': 0}, 'MIN_SEPARATION'),
+                            ({'min_ridge_width_px': -1}, 'MIN_RIDGE_WIDTH_PX'),
                             ({'core_value_min': 256}, 'CORE_VALUE_MIN')]:
             with self.subTest(values=values):
                 self.write_config(values)
