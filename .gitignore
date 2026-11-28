@@ -2,6 +2,7 @@
 .work/
 # One active local classifier dataset (images, labels and provenance)
 /DATASET_CLASSIFIER/
+/NEW_DATA/
 .vs/
 .idea/
 *.suo

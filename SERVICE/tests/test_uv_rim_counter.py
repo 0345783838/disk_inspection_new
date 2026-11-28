@@ -120,6 +120,18 @@ class UvRimCounterTests(unittest.TestCase):
         result, _ = count_uv_rims(cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR), 1)
         self.assertEqual(result['count'], 0)
 
+    def test_single_brightness_step_is_rejected_without_losing_thin_rim(self):
+        hsv = np.zeros((100, 320, 3), np.uint8)
+        hsv[:, :100] = (113, 45, 175)
+        hsv[:, 225] = (113, 75, 190)
+        image = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        for mirrored in (False, True):
+            with self.subTest(mirrored=mirrored):
+                result, _ = count_uv_rims(cv2.flip(image, 1) if mirrored else image, 1)
+                self.assertEqual(result['count'], 1)
+                self.assertLessEqual(abs(result['tracks'][0]['center_x'] - (94 if mirrored else 225)), 2)
+                self.assertTrue(any(t['reasons'] == ['one-sided brightness edge'] for t in result['rejected']))
+
     def test_fan_shaped_primary_rims_survive_full_length_opposed_shadow(self):
         image = np.zeros((150, 600, 3), np.uint8)
         mx, _, _, _ = fan_maps(image.shape[:2], -.35, 0., -.04)

@@ -217,16 +217,22 @@ def compare_bright_ridges(value, first, second, contrast):
     return shared * 2 > fewer_bright_rows, separate
 
 
-def ridge_width(value, strong, track_x, min_contrast):
-    """Median horizontal width at half peak contrast on the original UV band."""
-    height, width = value.shape
+def bright_ridge_profiles(value, strong, track_x):
+    """Sample the original UV band around the brightest supported point on each row."""
+    width = value.shape[1]
     centers = np.rint(track_x).astype(int)
     rows = np.flatnonzero((centers >= 13) & (centers < width - 13))
     search = centers[rows, None] + np.arange(-3, 4)
     is_strong = strong[rows[:, None], search] != 0
+    supported = is_strong.any(axis=1)
+    rows, search, is_strong = rows[supported], search[supported], is_strong[supported]
     peaks = search[np.arange(len(rows)), np.argmax(
         np.where(is_strong, value[rows[:, None], search], -1), axis=1)]
-    profile = value[rows[:, None], peaks[:, None] + np.arange(-10, 11)].astype(float)
+    return value[rows[:, None], peaks[:, None] + np.arange(-10, 11)].astype(float)
+
+
+def ridge_width(profile, height, min_contrast):
+    """Median horizontal width at half peak contrast."""
     peak = profile[:, 10]
     background = np.median(profile, axis=1)
     contrast = peak - background
@@ -234,8 +240,7 @@ def ridge_width(value, strong, track_x, min_contrast):
     below = profile <= half[:, None]
     left = np.max(np.where(below[:, :10], np.arange(10), -1), axis=1)
     right = np.min(np.where(below[:, 11:], np.arange(11, 21), 21), axis=1)
-    valid = np.flatnonzero(is_strong.any(axis=1) & (contrast >= min_contrast) &
-                           (contrast > 0) & (left >= 0) & (right < 21))
+    valid = np.flatnonzero((contrast >= min_contrast) & (contrast > 0) & (left >= 0) & (right < 21))
     if len(valid) < max(5, math.ceil(.25 * height)):
         return None
     left, right, half = left[valid], right[valid], half[valid]
@@ -246,12 +251,20 @@ def ridge_width(value, strong, track_x, min_contrast):
     return float(np.median(x_right - x_left))
 
 
-def reject_thin_secondary_ridges(tracks, value, strong, settings):
+def is_one_sided_edge(profile, height, min_contrast):
+    """A persistent brightness step keeps one side of the track bright."""
+    peak = profile[:, 10]
+    left_drop = peak - np.median(profile[:, :5], axis=1)
+    right_drop = peak - np.median(profile[:, -5:], axis=1)
+    step_contrast = max(1, 2 * min_contrast)
+    left_only = np.count_nonzero((left_drop >= step_contrast) & (right_drop <= .4 * left_drop))
+    right_only = np.count_nonzero((right_drop >= step_contrast) & (left_drop <= .4 * right_drop))
+    # Insist on the same dark side over most supported rows and a substantial part of the band.
+    return max(left_only, right_only) >= max(.35 * height, .8 * len(profile))
+
+
+def reject_thin_secondary_ridges(tracks, limit):
     """Reject thin ridges only where neighboring broad rims support that interpretation."""
-    limit = settings.min_ridge_width_px
-    for track in tracks:
-        track['width_px'] = ridge_width(value, strong, np.asarray(track['points'])[:, 0],
-                                        settings.strong_contrast)
     broad = [t for t in tracks if t['width_px'] is not None and t['width_px'] >= limit]
     if len(broad) < 5:
         # Sparse bands provide too little evidence to decide whether a thin rim is secondary.
@@ -332,6 +345,12 @@ def count_uv_rims(image, band, settings=None):
                  'strong_coverage': strong_coverage, 'observed_slope': observed_slope,
                  'expected_slope': expected_slope, 'points': points.tolist(), 'reasons': reasons}
         if not reasons:
+            profiles = bright_ridge_profiles(value, strong, observed_x)
+            width_px = ridge_width(profiles, height, settings.strong_contrast)
+            track['width_px'] = width_px
+            if width_px is None and is_one_sided_edge(profiles, height, settings.strong_contrast):
+                reasons.append('one-sided brightness edge')
+        if not reasons:
             tracks.append(track)
             bright = supported & (aligned_value[yy, xs] >= settings.strong_value)
             ridge_samples[int(center)] = (np.where(bright, xs, -1), observed_x)
@@ -362,7 +381,7 @@ def count_uv_rims(image, band, settings=None):
         rejected.append(track)
     tracks = sorted(unique, key=lambda t: t['center_x'])
     if settings.min_ridge_width_px > 0:
-        tracks, thin = reject_thin_secondary_ridges(tracks, value, strong, settings)
+        tracks, thin = reject_thin_secondary_ridges(tracks, settings.min_ridge_width_px)
         rejected.extend(thin)
     kept = np.zeros_like(weak)
     overlay = image.copy()

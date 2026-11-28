@@ -61,6 +61,17 @@ class RealReviewTests(unittest.TestCase):
         self.assertEqual(self.review.state()['records'][self.item['id']]['label'],'no_disk')
         report=audit(self.root);self.assertTrue(report['passed'],report['errors'])
 
+    def test_first_exclusion_starts_in_excluded_records(self):
+        self.save('exclude')
+        manifest = self.canonical.manifest()
+        self.assertEqual(manifest['records'], self.original['records'])
+        record, = manifest['excluded_records']
+        self.assertEqual((record['role'], record['split'], record['label']),
+                         ('excluded', 'excluded', 'exclude'))
+        self.assertEqual(read(self.root/'catalog.json')['records'], manifest['records'])
+        self.assertTrue((self.root/record['image']).is_file())
+        self.assertEqual(self.review.state()['reviewed'], 1)
+
     def test_stale_tab_and_failed_write_leave_truth_unchanged(self):
         self.save('ok')
         before=(self.root/'manifest.json').read_bytes()

@@ -489,7 +489,8 @@ class CanonicalDataset:
             for r in new_records:
                 r['canonical_updated_at'] = now
             updated.extend(new_records)
-            m['records'] = [r for r in records if r['role'] != 'excluded'] + new_records
+            records.extend(new_records)
+            m['records'] = [r for r in records if r['role'] != 'excluded']
             m['excluded_records'] = [r for r in records if r['role'] == 'excluded']
             m.update(canonical_revision=expected_revision + 1, updated_at=now,
                      review_status='in_progress', training_authorized=False, training_started=False)

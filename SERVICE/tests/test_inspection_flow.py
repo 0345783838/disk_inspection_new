@@ -233,6 +233,38 @@ class PipelineTests(unittest.TestCase):
         self.assertNotIn('Đĩa quá chéo', result.ErrorDesc)
         self.assertIn('Không ghép được', result.ErrorDesc)
 
+    def test_one_confirmed_empty_row_skips_only_its_gap_check(self):
+        positions = [30, 75, 120, 165, 210]
+        for empty_band in (0, 1):
+            with self.subTest(empty_band=empty_band):
+                measurements = [self._caliper_measurement([] if i // 2 == empty_band else positions, y)
+                                for i, y in enumerate((10, 5, 5, 10))]
+                self._segment_mock_measurements(measurements)
+                classifications = [(['ok'] * 25, [1.] * 25) for _ in range(4)]
+                classifications[empty_band * 2] = (['no_disk'] * 24 + ['ok'], [1.] * 25)
+                classifications[empty_band * 2 + 1] = (['no_disk'] * 25, [1.] * 25)
+                with patch.object(self.service.caliper, 'measure_with_params', side_effect=measurements * 2), \
+                        patch.object(self.service.point_classification_model, 'predict_batch',
+                                     side_effect=classifications * 2):
+                    result = self.service.check_disk_white(self.image.copy())
+                    debug = self.service.check_disk_debug(self.image.copy(), self.service._default_white_params())
+                self.assertEqual(result.ErrorCode, 'WARNING_001')
+                self.assertEqual(result.ErrorCode, debug.ErrorCode)
+                self.assertEqual(result.CaliperGapChecks, debug.CaliperGapChecks)
+                check = result.CaliperGapChecks[empty_band]
+                self.assertEqual((check['status'], check['reason']), ('skipped', 'empty_band'))
+                self.assertIsNone(check['max_delta_px'])
+                self.assertEqual(result.CaliperGapChecks[1 - empty_band]['status'], 'ok')
+                self.assertEqual(ast.literal_eval((result.Mid1, result.Mid2)[empty_band]), [])
+
+    def test_two_confirmed_empty_rows_remain_ng(self):
+        self.label = 'no_disk'
+        self.service.disk_segmentor_yolo.segment_large_image_debug = lambda image, *args: (
+            np.zeros(image.shape[:2], np.uint8), None)
+        result = self.service.check_disk_white(self.image.copy())
+        self.assertEqual(result.ErrorCode, 'ERROR_001')
+        self.assertEqual([check['status'] for check in result.CaliperGapChecks], ['skipped', 'skipped'])
+
     def test_white_uv_bands_follow_both_faces_of_middle_support(self):
         result = self.service.check_disk_white(self.image.copy())
         _, matrix, (width, _), _ = self.service.full_rectify_pipeline(

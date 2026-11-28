@@ -190,8 +190,12 @@ class DiskCheckingService(BaseService):
     @staticmethod
     def visualize_caliper_gap_delta(image, mids_1, mids_2, check):
         """Mark the same failing disk interval on both measurement lines."""
-        color = (0, 180, 0) if check['status'] == 'ok' else (0, 0, 255)
-        if check['status'] == 'invalid':
+        status = check['status']
+        color = (0, 180, 0) if status == 'ok' else (0, 0, 255)
+        if status == 'skipped':
+            color = (160, 160, 160)
+            label = 'CALIPER DELTA: SKIPPED (EMPTY ROW)'
+        elif status == 'invalid':
             label = 'CALIPER DELTA: INVALID ' + check['reason']
         else:
             label = f"CALIPER DELTA: {check['max_delta_px']:.1f}/{check['threshold_px']:g}px"
@@ -948,6 +952,7 @@ class DiskCheckingService(BaseService):
         )
         ng_groups = []
         no_disk_groups = []
+        empty_faces = []
         for row_boxes, direction in classify_regions:
             rects = self.get_line_boxes_ratio_shift(crop_img, row_boxes, direction)
             crops = self.crop_boxes(crop_img, rects, direction)
@@ -958,6 +963,10 @@ class DiskCheckingService(BaseService):
             if labels is None or class_confidences is None:
                 raise RuntimeError("Classification inference failed")
 
+            # Allow isolated OK predictions on the frame, with no NG on either face.
+            empty_faces.append(len(labels) == len(crops)
+                               and sum(label == ClassifyResult.NO_DISK for label in labels) >= .9 * len(crops)
+                               and ClassifyResult.NG not in labels)
             ng_groups.append(self.merge_boxes_1d_x([
                 (box, confidence)
                 for label, box, confidence in zip(labels, rects, class_confidences)
@@ -1030,12 +1039,17 @@ class DiskCheckingService(BaseService):
                 (1, crop_seg_1, mask_seg_1, mids_1, mids_2, [1, 2]),
                 (2, crop_seg_2, mask_seg_2, mids_3, mids_4, [3, 4])):
             check = compare_caliper_gaps(first, second, delta_limit, mask=mask)
+            face_index = (band - 1) * 2
+            if (check['counts'] == [0, 0] and not np.any(mask)
+                    and all(empty_faces[face_index:face_index+2])):
+                check.update(status='skipped', reason='empty_band')
             count_index = int(len(second) > len(first))
             white_mids.append((first, second)[count_index])
             check.update(band=band, calipers=lines, count_caliper=lines[count_index])
             gap_checks.append(check)
             self.visualize_caliper_gap_delta(crop, first, second, check)
-        res_gap_delta = all(check['status'] == 'ok' for check in gap_checks)
+        gap_statuses = {check['status'] for check in gap_checks}
+        res_gap_delta = 'ok' in gap_statuses and gap_statuses <= {'ok', 'skipped'}
 
         # Summary result
         res_classification = InspectionState.NG
